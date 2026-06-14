@@ -52,8 +52,58 @@ p, span, label, div, button, input, textarea {
     margin-bottom: 80px;
 }
 
-/* Hide default streamlit user/assistant avatars if using native widgets */
-/* But we are using custom HTML chat widgets, so we handle formatting ourselves */
+/* Breathe Visualizer Styles */
+.breathe-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 15px auto;
+    padding: 20px;
+    background: #1C1F2E;
+    border-radius: 12px;
+    border: 1px solid #312E6B;
+    max-width: 320px;
+    text-align: center;
+}
+.breathe-wrapper {
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.breathe-circle {
+    width: 50px;
+    height: 50px;
+    background-color: rgba(167, 139, 250, 0.2);
+    border: 3px solid #A78BFA;
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(167, 139, 250, 0.5);
+    animation: box-breath 16s infinite ease-in-out;
+}
+.breathe-text {
+    margin-top: 15px;
+    font-weight: 600;
+    font-size: 15px;
+    color: #A78BFA;
+    height: 20px;
+}
+.breathe-text::after {
+    content: "Breathe In (4s)";
+    animation: box-breath-text-pseudo 16s infinite step-end;
+}
+@keyframes box-breath {
+    0%, 100% { transform: scale(1); background-color: rgba(167, 139, 250, 0.2); }
+    25% { transform: scale(2.2); background-color: rgba(167, 139, 250, 0.6); box-shadow: 0 0 25px rgba(167, 139, 250, 0.8); }
+    50% { transform: scale(2.2); background-color: rgba(167, 139, 250, 0.6); box-shadow: 0 0 25px rgba(167, 139, 250, 0.8); }
+    75% { transform: scale(1); background-color: rgba(167, 139, 250, 0.2); }
+}
+@keyframes box-breath-text-pseudo {
+    0%, 24.9% { content: "💨 Breathe In (4s)"; }
+    25%, 49.9% { content: "🛑 Hold (4s)"; }
+    50%, 74.9% { content: "🌬️ Breathe Out (4s)"; }
+    75%, 100% { content: "🛑 Hold (4s)"; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -115,6 +165,8 @@ if "crisis_triggered" not in st.session_state:
     st.session_state.crisis_triggered = False
 if "current_mood" not in st.session_state:
     st.session_state.current_mood = {"mood": "neutral", "intensity": "low"}
+if "skipped_tips" not in st.session_state:
+    st.session_state.skipped_tips = []
 
 # SIDEBAR IMPLEMENTATION
 with st.sidebar:
@@ -225,6 +277,16 @@ badge_html = f"""
 """
 st.markdown(badge_html, unsafe_allow_html=True)
 
+# Manual Mood Selector Buttons
+st.markdown("<p style='font-size: 12px; color: #94A3B8; margin-bottom: 5px; font-weight: 500;'>How are you feeling right now? Tap to tell MindSpace:</p>", unsafe_allow_html=True)
+mood_cols = st.columns(len(MOOD_METADATA))
+for col, (mood_key, m_meta) in zip(mood_cols, MOOD_METADATA.items()):
+    with col:
+        if st.button(m_meta["emoji"], key=f"mood_select_btn_{mood_key}", help=f"I'm feeling {m_meta['label']}", use_container_width=True):
+            st.session_state.current_mood = {"mood": mood_key, "intensity": "medium"}
+            st.session_state.mood_history.append({"mood": mood_key, "intensity": "medium"})
+            st.rerun()
+
 # Render Chat Log
 chat_placeholder = st.container()
 
@@ -274,11 +336,24 @@ with chat_placeholder:
             
             # Show Tip Card if flag is set for this message
             if msg.get("show_tip") and msg.get("tip_mood") in TIPS:
-                tip = TIPS[msg["tip_mood"]]
+                tip_mood = msg.get("tip_mood")
+                tip = TIPS[tip_mood]
                 tip_content_html = markdown_to_html(tip["content"])
                 
+                # Check for breathing visualizer HTML
+                breathe_viz_html = ""
+                if tip_mood == "anxious":
+                    breathe_viz_html = """
+                    <div class="breathe-container">
+                        <div class="breathe-wrapper">
+                            <div class="breathe-circle"></div>
+                        </div>
+                        <div class="breathe-text"></div>
+                    </div>
+                    """
+                
                 st.markdown(f"""
-                <div style="display: flex; justify-content: flex-start; width: 100%; margin: -4px 0 16px 0;">
+                <div style="display: flex; justify-content: flex-start; width: 100%; margin: -4px 0 6px 0;">
                     <details open style="
                         background-color: #252A3D;
                         border: 1px solid #A78BFA;
@@ -302,10 +377,40 @@ with chat_placeholder:
                             <strong style="font-size: 15px; color: #F3F4F6;">{tip['title']}</strong>
                             <p style="margin: 4px 0 10px 0; color: #94A3B8; font-style: italic;">{tip['description']}</p>
                             {tip_content_html}
+                            {breathe_viz_html}
                         </div>
                     </details>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Feedback options row for this message
+                fb_col1, fb_col2, fb_col3 = st.columns([2, 2, 3])
+                with fb_col1:
+                    if msg.get("feedback_given") == "helpful":
+                        st.markdown("<p style='color: #34D399; font-size: 13px; font-weight: 600; margin-top: 8px; margin-bottom: 12px;'>Glad that helped! 💜</p>", unsafe_allow_html=True)
+                    elif msg.get("feedback_given") == "try_another":
+                        pass
+                    else:
+                        if st.button("👍 This helps", key=f"help_btn_{idx}"):
+                            msg["feedback_given"] = "helpful"
+                            st.rerun()
+                with fb_col2:
+                    if not msg.get("feedback_given"):
+                        if st.button("🔄 Try Another", key=f"try_another_btn_{idx}"):
+                            all_tip_keys = list(TIPS.keys())
+                            if "skipped_tips" not in st.session_state:
+                                st.session_state.skipped_tips = []
+                            if tip_mood not in st.session_state.skipped_tips:
+                                st.session_state.skipped_tips.append(tip_mood)
+                            
+                            remaining = [k for k in all_tip_keys if k not in st.session_state.skipped_tips]
+                            if not remaining:
+                                st.session_state.skipped_tips = [tip_mood]
+                                remaining = [k for k in all_tip_keys if k != tip_mood]
+                            
+                            next_mood = remaining[0] if remaining else tip_mood
+                            msg["tip_mood"] = next_mood
+                            st.rerun()
 
 # User Input Box
 user_input = st.chat_input("Talk to MindSpace...")
