@@ -56,6 +56,8 @@ def get_chat_response(conversation_history: list, user_data: dict = None) -> str
             dynamic_prompt += f"- Name: {user_data.get('display_name', 'Unknown')}\n"
             if user_data.get('dob'):
                 dynamic_prompt += f"- Date of Birth: {user_data.get('dob')}\n"
+            if user_data.get('gender') and user_data.get('gender') != "Prefer not to say":
+                dynamic_prompt += f"- Gender: {user_data.get('gender')}\n"
             if user_data.get('career_level'):
                 dynamic_prompt += f"- Career Level: {user_data.get('career_level')}\n"
             if user_data.get('study_info'):

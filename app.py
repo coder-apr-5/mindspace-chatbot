@@ -18,6 +18,9 @@ from utils.crisis_keywords import check_for_crisis, CRISIS_BANNER_HTML
 
 load_dotenv()
 
+# Must be the first Streamlit command
+st.set_page_config(page_title="MindSpace", page_icon="🌿", layout="wide")
+
 # Function to get base64 of image
 @st.cache_data
 def get_base64_of_bin_file(bin_file):
@@ -368,7 +371,7 @@ def show_home():
     """, unsafe_allow_html=True)
 
 def show_login():
-    col_img, col_form = st.columns([1, 1], gap="large")
+    col_img, col_form = st.columns([1, 1.2], gap="large")
     with col_img:
         st.markdown(f'<div style="display:flex; justify-content:center; align-items:center; height:100%; margin-top:50px; max-width: 400px;"><img src="data:image/svg+xml;base64,{ROBOT_SVG_B64}" style="width:100%;"></div>', unsafe_allow_html=True)
         
@@ -410,7 +413,7 @@ def show_login():
             st.rerun()
 
 def show_signup():
-    col_img, col_form = st.columns([1, 1], gap="large")
+    col_img, col_form = st.columns([1, 1.2], gap="large")
     with col_img:
         st.markdown(f'<div style="display:flex; justify-content:center; align-items:center; height:100%; margin-top:50px; max-width: 400px;"><img src="data:image/svg+xml;base64,{ROBOT_SVG_B64}" style="width:100%;"></div>', unsafe_allow_html=True)
         
@@ -503,9 +506,11 @@ def show_onboarding():
         if st.session_state.onboarding_step == 1:
             st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 1 of 4: The Basics</p>", unsafe_allow_html=True)
             dob = st.date_input("When is your Birthday?", min_value=datetime.date(1950, 1, 1), max_value=datetime.date.today(), value=datetime.date(2005, 1, 1))
+            gender = st.selectbox("What is your gender?", ["Male", "Female", "Non-binary", "Prefer not to say"])
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Next Step ➔", use_container_width=True, type="primary"):
-                st.session_state.temp_dob = str(dob)
+                st.session_state.temp_dob = dob.strftime("%Y-%m-%d")
+                st.session_state.temp_gender = gender
                 st.session_state.onboarding_step = 2
                 st.rerun()
                 
@@ -582,7 +587,8 @@ def show_onboarding():
                         st.session_state.get("temp_dob", st.session_state.current_user.get("dob", "")), 
                         st.session_state.get("temp_study_info", st.session_state.current_user.get("study_info", "")), 
                         st.session_state.get("temp_career_level", st.session_state.current_user.get("career_level", "")),
-                        st.session_state.get("temp_bot_name", "MindSpace")
+                        st.session_state.get("temp_bot_name", "MindSpace"),
+                        st.session_state.get("temp_gender", st.session_state.current_user.get("gender", "Prefer not to say"))
                     )
                     # Refresh user object to show correct display name and status
                     st.session_state.current_user = get_user_by_username(st.session_state.current_user["username"])
