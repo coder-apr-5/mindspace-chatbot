@@ -47,15 +47,19 @@ def init_db():
         c.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
     except sqlite3.OperationalError:
         pass
-    try:
-        c.execute('ALTER TABLE users ADD COLUMN dob TEXT')
-        c.execute('ALTER TABLE users ADD COLUMN study_info TEXT')
-        c.execute('ALTER TABLE users ADD COLUMN career_level TEXT')
-        c.execute('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0')
-        c.execute('ALTER TABLE users ADD COLUMN bot_name TEXT')
-        c.execute('ALTER TABLE users ADD COLUMN gender TEXT')
-    except sqlite3.OperationalError:
-        pass
+    columns_to_add = [
+        "dob TEXT",
+        "study_info TEXT",
+        "career_level TEXT",
+        "onboarding_completed BOOLEAN DEFAULT 0",
+        "bot_name TEXT",
+        "gender TEXT"
+    ]
+    for col in columns_to_add:
+        try:
+            c.execute(f'ALTER TABLE users ADD COLUMN {col}')
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
 

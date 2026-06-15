@@ -794,7 +794,7 @@ def show_chatbot():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    fb_col1, fb_col2, fb_col3 = st.columns([2, 2, 3])
+                    fb_col1, fb_col2, fb_col3, fb_col4 = st.columns([2, 2, 4, 2])
                     with fb_col1:
                         if msg.get("feedback_given") == "helpful":
                             st.markdown("<p style='color: #34D399; font-size: 14px; font-weight: 700; margin-top: 8px;'>Glad that helped! 💜</p>", unsafe_allow_html=True)
@@ -818,6 +818,11 @@ def show_chatbot():
                                     remaining = [k for k in all_tip_keys if k != tip_mood]
                                 next_mood = remaining[0] if remaining else tip_mood
                                 msg["tip_mood"] = next_mood
+                                st.rerun()
+                    with fb_col4:
+                        if not msg.get("feedback_given"):
+                            if st.button("❌ Cancel", key=f"cancel_btn_{idx}", use_container_width=True):
+                                msg["show_tip"] = False
                                 st.rerun()
     
     if user_input := st.chat_input(f"Talk to {bot_name}..."):
