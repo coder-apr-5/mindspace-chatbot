@@ -16,20 +16,27 @@ def init_db():
             email TEXT UNIQUE,
             password_hash TEXT,
             auth_provider TEXT DEFAULT 'manual',
-            is_verified BOOLEAN DEFAULT 0
+            is_verified BOOLEAN DEFAULT 0,
+            display_name TEXT
         )
     ''')
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
-def create_user(username, email, password_hash, auth_provider='manual', is_verified=False):
+def create_user(username, email, password_hash, auth_provider='manual', is_verified=False, display_name=None):
+    if display_name is None:
+        display_name = username
     conn = get_connection()
     c = conn.cursor()
     try:
         c.execute('''
-            INSERT INTO users (username, email, password_hash, auth_provider, is_verified)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (username, email, password_hash, auth_provider, is_verified))
+            INSERT INTO users (username, email, password_hash, auth_provider, is_verified, display_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (username, email, password_hash, auth_provider, is_verified, display_name))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -50,7 +57,8 @@ def get_user_by_username(username):
             "email": user[2],
             "password_hash": user[3],
             "auth_provider": user[4],
-            "is_verified": bool(user[5])
+            "is_verified": bool(user[5]),
+            "display_name": user[6] if len(user) > 6 and user[6] else user[1]
         }
     return None
 
@@ -67,7 +75,8 @@ def get_user_by_email(email):
             "email": user[2],
             "password_hash": user[3],
             "auth_provider": user[4],
-            "is_verified": bool(user[5])
+            "is_verified": bool(user[5]),
+            "display_name": user[6] if len(user) > 6 and user[6] else user[1]
         }
     return None
 
