@@ -43,7 +43,10 @@ h1, h2, h3, h4, h5, h6, .brand-title {
 }
 
 /* Body and UI Elements */
-p, span, label, div, button, input, textarea {
+.stApp {
+    font-family: 'Inter', sans-serif;
+}
+p, label, button, input, textarea, li {
     font-family: 'Inter', sans-serif !important;
 }
 
