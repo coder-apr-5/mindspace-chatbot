@@ -261,8 +261,8 @@ def show_intro():
     st.markdown(f"""
     <div class="splash-container">
         <img src="{brain_img_html}" class="splash-image" alt="MindSpace Brain" />
-        <h2 style="color: #A78BFA; font-family: 'Quicksand', sans-serif; font-size: 1.8rem; margin-top: 30px; font-weight: 600; letter-spacing: 1.5px; text-shadow: 0 0 15px rgba(167, 139, 250, 0.4);">
-            Your Safe Space for Mental Clarity
+        <h2 style="color: #A78BFA; font-family: 'Quicksand', sans-serif; font-size: 1.8rem; margin-top: 30px; font-weight: 600; letter-spacing: 1.5px; text-shadow: 0 0 15px rgba(167, 139, 250, 0.4); text-align: center;">
+            Your Personal<br>AI Mental Health Buddy
         </h2>
     </div>
     """, unsafe_allow_html=True)
@@ -719,8 +719,11 @@ def show_chatbot():
         st.session_state.current_mood = detected
         st.session_state.mood_history.append(detected)
         
-        with st.spinner("MindSpace is listening..."):
-            ai_reply = get_chat_response(st.session_state.messages)
+        with st.spinner("MindSpace is thinking..."):
+            ai_reply = get_chat_response(
+                st.session_state.messages,
+                user_data=st.session_state.current_user
+            )
             
         negative_moods = ["anxious", "sad", "stressed", "lonely", "overwhelmed"]
         show_tip = False

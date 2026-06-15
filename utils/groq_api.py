@@ -34,7 +34,7 @@ def get_api_key() -> str:
     # Fallback to system environment variable
     return os.environ.get("GROQ_API_KEY", "")
 
-def get_chat_response(conversation_history: list) -> str:
+def get_chat_response(conversation_history: list, user_data: dict = None) -> str:
     """
     Sends the full conversation history to Groq and returns the model reply.
     Prepend system prompt to the messages.
@@ -46,8 +46,20 @@ def get_chat_response(conversation_history: list) -> str:
     try:
         client = Groq(api_key=api_key)
         
+        dynamic_prompt = SYSTEM_PROMPT
+        if user_data:
+            dynamic_prompt += "\n\nInformation about the user you are talking to:\n"
+            dynamic_prompt += f"- Name: {user_data.get('display_name', 'Unknown')}\n"
+            if user_data.get('dob'):
+                dynamic_prompt += f"- Date of Birth: {user_data.get('dob')}\n"
+            if user_data.get('career_level'):
+                dynamic_prompt += f"- Career Level: {user_data.get('career_level')}\n"
+            if user_data.get('study_info'):
+                dynamic_prompt += f"- Study/Work Info: {user_data.get('study_info')}\n"
+            dynamic_prompt += "Use this context to personalize your responses naturally. Mention their name occasionally, and tailor advice to their career/study level."
+
         # Prepare messages: inject system prompt as first message
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": dynamic_prompt}]
         
         # Format conversation history
         for msg in conversation_history:
