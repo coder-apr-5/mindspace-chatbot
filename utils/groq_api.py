@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import datetime
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -62,7 +63,11 @@ def get_chat_response(conversation_history: list, user_data: dict = None) -> str
                 recent_moods = [m["mood"] if isinstance(m, dict) else str(m) for m in st.session_state.mood_history[-5:]]
                 dynamic_prompt += f"- Recent Mood History: {', '.join(recent_moods)}\n"
 
-            dynamic_prompt += "Use this context to personalize your responses naturally. Mention their name occasionally, and tailor advice to their career/study level. Reference their recent mood trends if appropriate."
+            dynamic_prompt += "\nUse this context to personalize your responses naturally. Mention their name occasionally, and tailor advice to their career/study level. Reference their recent mood trends if appropriate."
+
+        # Inject real-time clock
+        now = datetime.datetime.now()
+        dynamic_prompt += f"\n\n[SYSTEM INFO] The current date and time is: {now.strftime('%A, %B %d, %Y %I:%M %p')}. If the user asks for the time, provide it confidently."
 
         # Prepare messages: inject system prompt as first message
         messages = [{"role": "system", "content": dynamic_prompt}]
