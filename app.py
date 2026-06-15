@@ -8,8 +8,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Database and Auth utilities
-from utils.db import create_user, get_user_by_username, get_user_by_email, verify_user, update_user_onboarding
+from utils.db import create_user, get_user_by_username, get_user_by_email, verify_user, update_user_onboarding, save_message, get_user_messages, save_mood, get_user_moods, delete_user_history
 from utils.auth import hash_password, verify_password, check_password_strength, is_valid_email, generate_verification_code, send_verification_email
 
 from utils.groq_api import get_chat_response, get_api_key
@@ -516,20 +515,49 @@ def show_chatbot():
         st.warning("Please log in first.")
         st.session_state.app_page = "login"
         st.rerun()
-        return
+
+    username = st.session_state.current_user["username"]
+
+    if "messages" not in st.session_state:
+        db_msgs = get_user_messages(username)
+        if db_msgs:
+            st.session_state.messages = db_msgs
+        else:
+            st.session_state.messages = [{"role": "assistant", "content": f"Hello {st.session_state.current_user['display_name']}! I'm MindSpace, your companion. How are you feeling today?", "show_tip": False, "tip_mood": "neutral"}]
+
+    if "current_mood" not in st.session_state:
+        st.session_state.current_mood = "neutral"
+
+    if "mood_history" not in st.session_state:
+        db_moods = get_user_moods(username)
+        if db_moods:
+            st.session_state.mood_history = db_moods
+        else:
+            st.session_state.mood_history = []
 
     with st.sidebar:
-        st.markdown("<h1 class='brand-title' style='margin-bottom: 0; color: #A78BFA;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
-        display_name = st.session_state.current_user.get('display_name', st.session_state.current_user['username'])
-        st.markdown(f"<p style='font-size: 15px; color: #F3F4F6; margin-top: 5px; font-weight: 600;'>Welcome, {display_name}!</p>", unsafe_allow_html=True)
-        st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color: #F3F4F6;'>Hello, {st.session_state.current_user.get('display_name', 'User')} 👋</h3>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
+        st.markdown("<h4 style='color: #A78BFA;'>Your MindSpace</h4>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #94A3B8; font-size: 0.9rem;'>I'm here to listen, support, and help you navigate your thoughts.</p>", unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🗑️ Clear Chat History", use_container_width=True):
+            delete_user_history(username)
+            st.session_state.messages = [{"role": "assistant", "content": f"Hello {st.session_state.current_user['display_name']}! I've wiped our history. We're starting fresh. How are you feeling today?", "show_tip": False, "tip_mood": "neutral"}]
+            st.session_state.mood_history = []
+            st.session_state.current_mood = "neutral"
+            st.rerun()
+
+        st.markdown("<br><br>", unsafe_allow_html=True)        
         st.markdown("<h3 style='color: #A78BFA; font-size: 18px; margin-bottom: 10px;'>📈 Mood Timeline</h3>", unsafe_allow_html=True)
         if st.session_state.mood_history:
             trail_parts = []
             last_moods = st.session_state.mood_history[-6:]
             for m in last_moods:
-                meta = MOOD_METADATA.get(m["mood"], MOOD_METADATA["neutral"])
+                mood_val = m if isinstance(m, str) else m["mood"]
+                meta = MOOD_METADATA.get(mood_val, MOOD_METADATA["neutral"])
                 trail_parts.append(f"{meta['emoji']} {meta['label']}")
             trail_str = " → ".join(trail_parts)
             st.markdown(
@@ -561,14 +589,6 @@ def show_chatbot():
             
         st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
-        if st.button("🗑️ Clear Chat", use_container_width=True):
-            st.session_state.messages = [{"role": "assistant", "content": "Hello! I'm MindSpace, your companion. How are you feeling today?", "show_tip": False, "tip_mood": "neutral"}]
-            st.session_state.mood_history = []
-            st.session_state.crisis_triggered = False
-            st.session_state.current_mood = {"mood": "neutral", "intensity": "low"}
-            st.session_state.skipped_tips = []
-            st.rerun()
-            
         if st.button("🚪 Log Out", use_container_width=True):
             st.session_state.current_user = None
             st.session_state.app_page = "home"
@@ -577,12 +597,14 @@ def show_chatbot():
     # MAIN CHAT
     st.markdown("<h1 style='margin-top: 0; color: #A78BFA; font-size: 2.8rem;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
     
-    if st.session_state.crisis_triggered:
+    if st.session_state.get('crisis_triggered', False):
         st.markdown(CRISIS_BANNER_HTML, unsafe_allow_html=True)
     
     current_mood_data = st.session_state.current_mood
-    meta = MOOD_METADATA.get(current_mood_data["mood"], MOOD_METADATA["neutral"])
-    intensity_label = current_mood_data["intensity"].upper()
+    mood_val = current_mood_data["mood"] if isinstance(current_mood_data, dict) else current_mood_data
+    intensity = current_mood_data["intensity"] if isinstance(current_mood_data, dict) else "medium"
+    meta = MOOD_METADATA.get(mood_val, MOOD_METADATA["neutral"])
+    intensity_label = intensity.upper()
     
     badge_html = f"""
     <div style="
@@ -610,6 +632,7 @@ def show_chatbot():
             if st.button(m_meta["emoji"], key=f"mood_select_btn_{mood_key}", help=f"I'm feeling {m_meta['label']}", use_container_width=True):
                 st.session_state.current_mood = {"mood": mood_key, "intensity": "medium"}
                 st.session_state.mood_history.append({"mood": mood_key, "intensity": "medium"})
+                save_mood(username, {"mood": mood_key, "intensity": "medium"})
                 st.rerun()
     
     chat_placeholder = st.container()
@@ -710,14 +733,18 @@ def show_chatbot():
                                 msg["tip_mood"] = next_mood
                                 st.rerun()
     
-    user_input = st.chat_input("Talk to MindSpace...")
-    if user_input:
-        if check_for_crisis(user_input):
-            st.session_state.crisis_triggered = True
+    if user_input := st.chat_input("Share your thoughts..."):
+        # Add user message to state and DB
         st.session_state.messages.append({"role": "user", "content": user_input})
+        save_message(username, "user", user_input)
+        
+        # Determine mood
         detected = detect_mood(st.session_state.messages)
         st.session_state.current_mood = detected
         st.session_state.mood_history.append(detected)
+        
+        mood_str = detected["mood"] if isinstance(detected, dict) else str(detected)
+        save_mood(username, mood_str)
         
         with st.spinner("MindSpace is thinking..."):
             ai_reply = get_chat_response(
@@ -729,13 +756,14 @@ def show_chatbot():
         show_tip = False
         if detected["mood"] in negative_moods and detected["intensity"] in ["medium", "high"]:
             show_tip = True
-            
+         # Add bot message to state and DB
         st.session_state.messages.append({
             "role": "assistant",
             "content": ai_reply,
             "show_tip": show_tip,
             "tip_mood": detected["mood"]
         })
+        save_message(username, "assistant", ai_reply)
         st.rerun()
 
 # ==========================================

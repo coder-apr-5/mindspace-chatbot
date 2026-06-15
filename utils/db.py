@@ -24,6 +24,23 @@ def init_db():
             onboarding_completed BOOLEAN DEFAULT 0
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            role TEXT,
+            content TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS moods (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            mood TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     try:
         c.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
     except sqlite3.OperationalError:
@@ -114,6 +131,44 @@ def verify_user(username):
     conn = get_connection()
     c = conn.cursor()
     c.execute('UPDATE users SET is_verified = 1 WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
+
+def save_message(username, role, content):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('INSERT INTO messages (username, role, content) VALUES (?, ?, ?)', (username, role, content))
+    conn.commit()
+    conn.close()
+
+def get_user_messages(username, limit=30):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT role, content FROM (SELECT role, content, timestamp FROM messages WHERE username = ? ORDER BY timestamp DESC LIMIT ?) ORDER BY timestamp ASC', (username, limit))
+    messages = c.fetchall()
+    conn.close()
+    return [{"role": msg[0], "content": msg[1]} for msg in messages]
+
+def save_mood(username, mood):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('INSERT INTO moods (username, mood) VALUES (?, ?)', (username, mood))
+    conn.commit()
+    conn.close()
+
+def get_user_moods(username, limit=10):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT mood FROM (SELECT mood, timestamp FROM moods WHERE username = ? ORDER BY timestamp DESC LIMIT ?) ORDER BY timestamp ASC', (username, limit))
+    moods = c.fetchall()
+    conn.close()
+    return [m[0] for m in moods]
+
+def delete_user_history(username):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM messages WHERE username = ?', (username,))
+    c.execute('DELETE FROM moods WHERE username = ?', (username,))
     conn.commit()
     conn.close()
 

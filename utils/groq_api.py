@@ -56,7 +56,13 @@ def get_chat_response(conversation_history: list, user_data: dict = None) -> str
                 dynamic_prompt += f"- Career Level: {user_data.get('career_level')}\n"
             if user_data.get('study_info'):
                 dynamic_prompt += f"- Study/Work Info: {user_data.get('study_info')}\n"
-            dynamic_prompt += "Use this context to personalize your responses naturally. Mention their name occasionally, and tailor advice to their career/study level."
+            
+            # Add historical mood context if it exists in session_state
+            if "mood_history" in st.session_state and len(st.session_state.mood_history) > 0:
+                recent_moods = [m["mood"] if isinstance(m, dict) else str(m) for m in st.session_state.mood_history[-5:]]
+                dynamic_prompt += f"- Recent Mood History: {', '.join(recent_moods)}\n"
+
+            dynamic_prompt += "Use this context to personalize your responses naturally. Mention their name occasionally, and tailor advice to their career/study level. Reference their recent mood trends if appropriate."
 
         # Prepare messages: inject system prompt as first message
         messages = [{"role": "system", "content": dynamic_prompt}]
