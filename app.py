@@ -4,10 +4,19 @@ import re
 import time
 import base64
 import os
+import requests
+from dotenv import load_dotenv
+
+# Database and Auth utilities
+from utils.db import create_user, get_user_by_username, get_user_by_email, verify_user
+from utils.auth import hash_password, verify_password, check_password_strength, is_valid_email, generate_verification_code, send_verification_email
+
 from utils.groq_api import get_chat_response, get_api_key
 from utils.mood_detector import detect_mood
 from utils.tip_cards import TIPS
 from utils.crisis_keywords import check_for_crisis, CRISIS_BANNER_HTML
+
+load_dotenv()
 
 # Function to get base64 of image
 @st.cache_data
@@ -15,6 +24,36 @@ def get_base64_of_bin_file(bin_file):
     with open(bin_file, 'rb') as f:
         data = f.read()
     return base64.b64encode(data).decode()
+
+# Google OAuth Utils
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+
+def get_google_auth_url():
+    redirect_uri = "http://localhost:8501"
+    scope = "openid email profile"
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
+    return url
+
+def authenticate_google_code(code):
+    redirect_uri = "http://localhost:8501"
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code"
+    }
+    r = requests.post(token_url, data=data)
+    if r.status_code == 200:
+        access_token = r.json().get("access_token")
+        user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        user_info_r = requests.get(user_info_url, headers=headers)
+        if user_info_r.status_code == 200:
+            return user_info_r.json()
+    return None
 
 # Page Configuration
 st.set_page_config(
@@ -24,6 +63,27 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Handle Google OAuth Callback via Query Params
+if "code" in st.query_params:
+    code = st.query_params["code"]
+    st.query_params.clear() # Clear it so it doesn't run again
+    
+    with st.spinner("Authenticating with Google..."):
+        user_info = authenticate_google_code(code)
+        if user_info:
+            email = user_info.get("email")
+            name = user_info.get("name", "Google User")
+            user = get_user_by_email(email)
+            if not user:
+                create_user(username=email, email=email, password_hash="", auth_provider="google", is_verified=True)
+                user = get_user_by_email(email)
+                
+            st.session_state.current_user = user
+            st.session_state.app_page = "chatbot"
+            st.rerun()
+        else:
+            st.error("Failed to authenticate with Google. Please check your credentials.")
+
 # Pre-load the brain image
 brain_image_path = os.path.join("assets", "intro_logo.png")
 if os.path.exists(brain_image_path):
@@ -32,12 +92,11 @@ if os.path.exists(brain_image_path):
 else:
     brain_img_html = ""
 
-# Custom styling block for Student-Friendly UI
+# Custom styling block
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Quicksand:wght@500;600;700&display=swap');
 
-/* Main app background and global font resets */
 .stApp {
     background: radial-gradient(circle at top center, #1e1c2e, #11131c) !important;
     color: #F3F4F6 !important;
@@ -54,18 +113,15 @@ st.markdown("""
     border-right: 1px solid rgba(167, 139, 250, 0.2) !important;
 }
 
-/* Headings: Soft and welcoming */
 h1, h2, h3, h4, h5, h6, .brand-title {
     font-family: 'Quicksand', sans-serif !important;
     font-weight: 700;
 }
 
-/* Body and UI Elements */
 p, label, button, input, textarea, li {
     font-family: 'Nunito', sans-serif !important;
 }
 
-/* Interactive Brain Image Hover Effects */
 .interactive-brain {
     transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
     filter: drop-shadow(0 0 15px rgba(167, 139, 250, 0.3));
@@ -83,11 +139,9 @@ p, label, button, input, textarea, li {
     100% { transform: translateY(0px); }
 }
 
-/* Glassmorphism Cards */
 .glass-card {
     background: rgba(37, 42, 61, 0.5);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     padding: 30px;
@@ -99,7 +153,6 @@ p, label, button, input, textarea, li {
     border-top: 2px solid #A78BFA;
 }
 
-/* Splash Customizations */
 .splash-container {
     display: flex;
     flex-direction: column;
@@ -118,7 +171,6 @@ p, label, button, input, textarea, li {
     from { box-shadow: 0 0 30px rgba(167, 139, 250, 0.3); transform: scale(0.98); }
     to { box-shadow: 0 0 70px rgba(167, 139, 250, 0.8); transform: scale(1.03); }
 }
-
 @keyframes fadeInOut {
     0% { opacity: 0; transform: scale(0.9); }
     15% { opacity: 1; transform: scale(1); }
@@ -126,73 +178,12 @@ p, label, button, input, textarea, li {
     100% { opacity: 0; transform: scale(1.1); }
 }
 
-/* Chat Log Spacing */
-.chat-log {
-    margin-top: 10px;
-    margin-bottom: 80px;
-}
-
-/* Breathe Visualizer Styles */
-.breathe-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    margin: 15px auto;
-    padding: 20px;
-    background: rgba(28, 31, 46, 0.6);
-    border-radius: 16px;
-    border: 1px solid rgba(167, 139, 250, 0.3);
-    max-width: 320px;
-    text-align: center;
-}
-.breathe-wrapper {
-    height: 140px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.breathe-circle {
-    width: 50px;
-    height: 50px;
-    background-color: rgba(167, 139, 250, 0.2);
-    border: 3px solid #A78BFA;
-    border-radius: 50%;
-    box-shadow: 0 0 15px rgba(167, 139, 250, 0.5);
-    animation: box-breath 16s infinite ease-in-out;
-}
-.breathe-text {
-    margin-top: 15px;
-    font-weight: 700;
-    font-size: 15px;
-    color: #A78BFA;
-    height: 20px;
-}
-.breathe-text::after {
-    content: "Breathe In (4s)";
-    animation: box-breath-text-pseudo 16s infinite step-end;
-}
-@keyframes box-breath {
-    0%, 100% { transform: scale(1); background-color: rgba(167, 139, 250, 0.2); }
-    25% { transform: scale(2.2); background-color: rgba(167, 139, 250, 0.6); box-shadow: 0 0 25px rgba(167, 139, 250, 0.8); }
-    50% { transform: scale(2.2); background-color: rgba(167, 139, 250, 0.6); box-shadow: 0 0 25px rgba(167, 139, 250, 0.8); }
-    75% { transform: scale(1); background-color: rgba(167, 139, 250, 0.2); }
-}
-@keyframes box-breath-text-pseudo {
-    0%, 24.9% { content: "💨 Breathe In (4s)"; }
-    25%, 49.9% { content: "🛑 Hold (4s)"; }
-    50%, 74.9% { content: "🌬️ Breathe Out (4s)"; }
-    75%, 100% { content: "🛑 Hold (4s)"; }
-}
-
-/* Auth Pages Inputs */
 div[data-baseweb="input"] {
     border-radius: 12px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Mood Metadata
 MOOD_METADATA = {
     "happy": {"emoji": "😊", "label": "Happy", "color": "#34D399"},
     "neutral": {"emoji": "😐", "label": "Neutral", "color": "#94A3B8"},
@@ -240,6 +231,8 @@ if "current_mood" not in st.session_state:
     st.session_state.current_mood = {"mood": "neutral", "intensity": "low"}
 if "skipped_tips" not in st.session_state:
     st.session_state.skipped_tips = []
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
 
 # ==========================================
 # PAGE ROUTING FUNCTIONS
@@ -308,17 +301,33 @@ def show_login():
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        username = st.text_input("Username", placeholder="Enter your username")
+        username_or_email = st.text_input("Username or Email", placeholder="Enter your username")
         password = st.text_input("Password", type="password", placeholder="Enter your password")
         st.markdown("<br>", unsafe_allow_html=True)
+        
         if st.button("Submit Login", use_container_width=True, type="primary"):
-            if username and password:
-                st.session_state.app_page = "chatbot"
-                st.rerun()
+            if username_or_email and password:
+                user = get_user_by_username(username_or_email) or get_user_by_email(username_or_email)
+                if user:
+                    if user['auth_provider'] != 'manual':
+                        st.error(f"This account uses Google Login. Please use 'Sign in with Google'.")
+                    elif not user['is_verified']:
+                        st.error("Please verify your email first.")
+                    else:
+                        if verify_password(password, user['password_hash']):
+                            st.session_state.current_user = user
+                            st.session_state.app_page = "chatbot"
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials.")
+                else:
+                    st.error("Invalid credentials.")
             else:
-                st.error("Please enter both username and password.")
+                st.error("Please enter both username/email and password.")
         
         st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2); margin: 30px 0;'>", unsafe_allow_html=True)
+        st.link_button("🌐 Sign in with Google", get_google_auth_url(), use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Back to Home", use_container_width=True):
             st.session_state.app_page = "home"
             st.rerun()
@@ -332,23 +341,83 @@ def show_signup():
         username = st.text_input("Choose Username", placeholder="e.g. mindful_student")
         email = st.text_input("Email Address", placeholder="you@university.edu")
         password = st.text_input("Create Password", type="password", placeholder="Strong password")
+        
+        if password:
+            is_strong, msg = check_password_strength(password)
+            if is_strong:
+                st.success("Strong password! ✨")
+            else:
+                st.warning(f"Weak Password: {msg}")
+                
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Create Account", use_container_width=True, type="primary"):
-            if username and password and email:
-                st.session_state.app_page = "chatbot"
-                st.rerun()
-            else:
+            if not username or not email or not password:
                 st.error("Please fill all fields to create an account.")
+            elif not is_valid_email(email):
+                st.error("Please enter a valid email address.")
+            else:
+                is_strong, msg = check_password_strength(password)
+                if not is_strong:
+                    st.error(f"Cannot proceed: {msg}")
+                else:
+                    if get_user_by_username(username):
+                        st.error("Username is already taken.")
+                    elif get_user_by_email(email):
+                        st.error("Email is already registered.")
+                    else:
+                        hashed = hash_password(password)
+                        if create_user(username, email, hashed, auth_provider='manual', is_verified=False):
+                            code = generate_verification_code()
+                            st.session_state.verification_code = code
+                            st.session_state.verifying_username = username
+                            st.session_state.verifying_email = email
+                            
+                            with st.spinner("Sending verification email..."):
+                                send_verification_email(email, code)
+                                
+                            st.session_state.app_page = "verify"
+                            st.rerun()
+                        else:
+                            st.error("A database error occurred.")
                 
         st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2); margin: 30px 0;'>", unsafe_allow_html=True)
+        st.link_button("🌐 Sign up with Google", get_google_auth_url(), use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Back to Home", use_container_width=True):
             st.session_state.app_page = "home"
             st.rerun()
 
+def show_verify():
+    st.markdown("<h2 style='text-align: center; color: #A78BFA; margin-top: 50px;'>Verify Your Email</h2>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #94A3B8;'>We sent a 6-digit code to <strong>{st.session_state.get('verifying_email', 'your email')}</strong>.</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        entered_code = st.text_input("6-Digit Code", max_chars=6)
+        if st.button("Verify & Login", use_container_width=True, type="primary"):
+            if entered_code == st.session_state.get("verification_code"):
+                username = st.session_state.get("verifying_username")
+                verify_user(username)
+                user = get_user_by_username(username)
+                st.session_state.current_user = user
+                st.success("Email verified successfully!")
+                time.sleep(1)
+                st.session_state.app_page = "chatbot"
+                st.rerun()
+            else:
+                st.error("Invalid verification code. Please try again.")
+
 def show_chatbot():
+    # Only allow access if logged in
+    if not st.session_state.current_user:
+        st.warning("Please log in first.")
+        st.session_state.app_page = "login"
+        st.rerun()
+        return
+
     with st.sidebar:
         st.markdown("<h1 class='brand-title' style='margin-bottom: 0; color: #A78BFA;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size: 13px; color: #94A3B8; margin-top: 0; margin-bottom: 25px;'>Your mental health companion</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size: 14px; color: #F3F4F6; margin-top: 0; font-weight: 600;'>Welcome, {st.session_state.current_user['username']}!</p>", unsafe_allow_html=True)
         st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
         st.markdown("<h3 style='color: #A78BFA; font-size: 18px; margin-bottom: 10px;'>📈 Mood Timeline</h3>", unsafe_allow_html=True)
@@ -373,46 +442,23 @@ def show_chatbot():
         st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
         st.markdown("<h3 style='color: #A78BFA; font-size: 18px; margin-bottom: 10px;'>⚡ Quick Relief</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size: 13px; color: #94A3B8; margin-bottom: 15px;'>Need to unwind right now?</p>", unsafe_allow_html=True)
         
         if st.button("💨 Box Breathing", use_container_width=True):
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"### 💨 Quick Box Breathing\n{TIPS['anxious']['content']}",
-                "show_tip": False,
-                "tip_mood": "anxious"
-            })
+            st.session_state.messages.append({"role": "assistant", "content": f"### 💨 Quick Box Breathing\n{TIPS['anxious']['content']}", "show_tip": False, "tip_mood": "anxious"})
             st.rerun()
             
         if st.button("🧘 Grounding Exercise", use_container_width=True):
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"### 🧘 Quick 5-4-3-2-1 Grounding\n{TIPS['stressed']['content']}",
-                "show_tip": False,
-                "tip_mood": "stressed"
-            })
+            st.session_state.messages.append({"role": "assistant", "content": f"### 🧘 Quick 5-4-3-2-1 Grounding\n{TIPS['stressed']['content']}", "show_tip": False, "tip_mood": "stressed"})
             st.rerun()
             
         if st.button("📝 Journaling Prompt", use_container_width=True):
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"### 📝 Quick Gratitude Journaling\n{TIPS['sad']['content']}",
-                "show_tip": False,
-                "tip_mood": "sad"
-            })
+            st.session_state.messages.append({"role": "assistant", "content": f"### 📝 Quick Gratitude Journaling\n{TIPS['sad']['content']}", "show_tip": False, "tip_mood": "sad"})
             st.rerun()
             
         st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
-        if st.button("🗑️ Clear Session", use_container_width=True):
-            st.session_state.messages = [
-                {
-                    "role": "assistant",
-                    "content": "Hello! I'm MindSpace, your companion. How are you feeling today? Remember, you can talk to me about school, stress, or anything on your mind. I'm here to listen.",
-                    "show_tip": False,
-                    "tip_mood": "neutral"
-                }
-            ]
+        if st.button("🗑️ Clear Chat", use_container_width=True):
+            st.session_state.messages = [{"role": "assistant", "content": "Hello! I'm MindSpace, your companion. How are you feeling today?", "show_tip": False, "tip_mood": "neutral"}]
             st.session_state.mood_history = []
             st.session_state.crisis_triggered = False
             st.session_state.current_mood = {"mood": "neutral", "intensity": "low"}
@@ -420,15 +466,9 @@ def show_chatbot():
             st.rerun()
             
         if st.button("🚪 Log Out", use_container_width=True):
+            st.session_state.current_user = None
             st.session_state.app_page = "home"
             st.rerun()
-            
-        st.markdown(
-            "<div style='font-size: 12px; color: #94A3B8; margin-top: 30px; border-top: 1px solid rgba(167, 139, 250, 0.2); padding-top: 15px; line-height: 1.5;'>"
-            "⚠️ <strong>Disclaimer</strong>: MindSpace is not a substitute for professional medical advice or clinical therapy."
-            "</div>",
-            unsafe_allow_html=True
-        )
 
     # MAIN CHAT
     st.markdown("<h1 style='margin-top: 0; color: #A78BFA; font-size: 2.8rem;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
@@ -517,17 +557,6 @@ def show_chatbot():
                     tip = TIPS[tip_mood]
                     tip_content_html = markdown_to_html(tip["content"])
                     
-                    breathe_viz_html = ""
-                    if tip_mood == "anxious":
-                        breathe_viz_html = """
-                        <div class="breathe-container">
-                            <div class="breathe-wrapper">
-                                <div class="breathe-circle"></div>
-                            </div>
-                            <div class="breathe-text"></div>
-                        </div>
-                        """
-                    
                     st.markdown(f"""
                     <div style="display: flex; justify-content: flex-start; width: 100%; margin: -6px 0 10px 0;">
                         <details open style="
@@ -539,21 +568,13 @@ def show_chatbot():
                             color: #E5E7EB;
                             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
                         ">
-                            <summary style="
-                                font-weight: 700;
-                                cursor: pointer;
-                                color: #A78BFA;
-                                outline: none;
-                                display: flex;
-                                align-items: center;
-                            ">
+                            <summary style="font-weight: 700; cursor: pointer; color: #A78BFA; outline: none; display: flex; align-items: center;">
                                 💡 Recommended Exercise
                             </summary>
                             <div style="margin-top: 12px; font-size: 15px; line-height: 1.6; border-top: 1px solid rgba(167, 139, 250, 0.2); padding-top: 12px;">
                                 <strong style="font-size: 16px; color: #F3F4F6;">{tip['title']}</strong>
                                 <p style="margin: 6px 0 12px 0; color: #94A3B8; font-style: italic;">{tip['description']}</p>
                                 {tip_content_html}
-                                {breathe_viz_html}
                             </div>
                         </details>
                     </div>
@@ -621,5 +642,7 @@ elif st.session_state.app_page == "login":
     show_login()
 elif st.session_state.app_page == "signup":
     show_signup()
+elif st.session_state.app_page == "verify":
+    show_verify()
 elif st.session_state.app_page == "chatbot":
     show_chatbot()
