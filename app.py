@@ -2,13 +2,14 @@ import streamlit as st
 import html
 import re
 import time
+import datetime
 import base64
 import os
 import requests
 from dotenv import load_dotenv
 
 # Database and Auth utilities
-from utils.db import create_user, get_user_by_username, get_user_by_email, verify_user
+from utils.db import create_user, get_user_by_username, get_user_by_email, verify_user, update_user_onboarding
 from utils.auth import hash_password, verify_password, check_password_strength, is_valid_email, generate_verification_code, send_verification_email
 
 from utils.groq_api import get_chat_response, get_api_key
@@ -34,6 +35,21 @@ def get_google_auth_url():
     scope = "openid email profile"
     url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={redirect_uri}&response_type=code&scope={scope}"
     return url
+
+def get_google_button_html():
+    return f"""
+    <a href="{get_google_auth_url()}" target="_self" style="text-decoration: none; width: 100%; display: block; margin-top: 10px;">
+        <div style="display: flex; align-items: center; justify-content: center; background-color: white; color: #3c4043; font-family: 'Roboto', sans-serif; font-weight: 500; height: 44px; border-radius: 8px; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15); cursor: pointer; transition: all 0.2s;">
+            <div style="margin-right: 12px; display: flex; align-items: center;">
+                <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="18px" height="18px" viewBox="0 0 48 48"><g><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path><path fill="none" d="M0 0h48v48H0z"></path></g></svg>
+            </div>
+            <span style="font-size: 15px;">Sign in with Google</span>
+        </div>
+    </a>
+    <style>
+        div:hover > svg {{ transform: scale(1.05); }}
+    </style>
+    """
 
 def authenticate_google_code(code):
     redirect_uri = "http://localhost:8501"
@@ -79,7 +95,10 @@ if "code" in st.query_params:
                 user = get_user_by_email(email)
                 
             st.session_state.current_user = user
-            st.session_state.app_page = "chatbot"
+            if not user.get('onboarding_completed', False):
+                st.session_state.app_page = "onboarding"
+            else:
+                st.session_state.app_page = "chatbot"
             st.rerun()
         else:
             st.error("Failed to authenticate with Google. Please check your credentials.")
@@ -316,7 +335,10 @@ def show_login():
                     else:
                         if verify_password(password, user['password_hash']):
                             st.session_state.current_user = user
-                            st.session_state.app_page = "chatbot"
+                            if not user.get('onboarding_completed', False):
+                                st.session_state.app_page = "onboarding"
+                            else:
+                                st.session_state.app_page = "chatbot"
                             st.rerun()
                         else:
                             st.error("Invalid credentials.")
@@ -326,7 +348,7 @@ def show_login():
                 st.error("Please enter both username/email and password.")
         
         st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2); margin: 30px 0;'>", unsafe_allow_html=True)
-        st.link_button("🌐 Sign in with Google", get_google_auth_url(), use_container_width=True)
+        st.markdown(get_google_button_html(), unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Back to Home", use_container_width=True):
             st.session_state.app_page = "home"
@@ -381,7 +403,7 @@ def show_signup():
                             st.error("A database error occurred.")
                 
         st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2); margin: 30px 0;'>", unsafe_allow_html=True)
-        st.link_button("🌐 Sign up with Google", get_google_auth_url(), use_container_width=True)
+        st.markdown(get_google_button_html(), unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Back to Home", use_container_width=True):
             st.session_state.app_page = "home"
@@ -402,10 +424,79 @@ def show_verify():
                 st.session_state.current_user = user
                 st.success("Email verified successfully!")
                 time.sleep(1)
-                st.session_state.app_page = "chatbot"
+                if not user.get('onboarding_completed', False):
+                    st.session_state.app_page = "onboarding"
+                else:
+                    st.session_state.app_page = "chatbot"
                 st.rerun()
             else:
                 st.error("Invalid verification code. Please try again.")
+
+def show_onboarding():
+    if "onboarding_step" not in st.session_state:
+        st.session_state.onboarding_step = 1
+
+    st.markdown("<h2 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 2.5rem;'>Let's Get to Know You</h2>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        if st.session_state.onboarding_step == 1:
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 1 of 3: The Basics</p>", unsafe_allow_html=True)
+            dob = st.date_input("When is your Birthday?", min_value=datetime.date(1950, 1, 1), max_value=datetime.date.today(), value=datetime.date(2005, 1, 1))
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Next Step ➔", use_container_width=True, type="primary"):
+                st.session_state.temp_dob = str(dob)
+                st.session_state.onboarding_step = 2
+                st.rerun()
+                
+        elif st.session_state.onboarding_step == 2:
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 2 of 3: Your Academic Life</p>", unsafe_allow_html=True)
+            career_level = st.selectbox("What is your current level?", ["School", "Undergraduate (UG)", "Postgraduate (PG)", "Professional", "Other"])
+            study_info = st.text_input("What & where are you studying/working?", placeholder="e.g. B.Tech CS at MIT")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("⬅ Back", use_container_width=True):
+                    st.session_state.onboarding_step = 1
+                    st.rerun()
+            with col_b2:
+                if st.button("Next Step ➔", use_container_width=True, type="primary"):
+                    st.session_state.temp_career_level = career_level
+                    st.session_state.temp_study_info = study_info
+                    st.session_state.onboarding_step = 3
+                    st.rerun()
+                    
+        elif st.session_state.onboarding_step == 3:
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 20px;'>Step 3 of 3: Welcome</p>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="background-color: rgba(37, 42, 61, 0.5); padding: 25px; border-radius: 15px; border: 1px solid rgba(167, 139, 250, 0.3); text-align: center;">
+                <h3 style="color: #F3F4F6; font-size: 1.5rem; margin-top: 0;">Welcome to MindSpace! 🌿</h3>
+                <p style="color: #E5E7EB; line-height: 1.6; margin-bottom: 20px;">
+                    We believe that mental well-being is the foundation of a successful life. MindSpace is built to be your trusted, confidential, and judgment-free companion. Here, your thoughts are safe, your feelings are valid, and support is always just a message away.
+                </p>
+                <p style="color: #A78BFA; font-weight: 600;">You are never alone on this journey.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("⬅ Back", use_container_width=True):
+                    st.session_state.onboarding_step = 2
+                    st.rerun()
+            with col_b2:
+                if st.button("Get Started ✨", use_container_width=True, type="primary"):
+                    update_user_onboarding(
+                        st.session_state.current_user["username"], 
+                        st.session_state.get("temp_dob", ""), 
+                        st.session_state.get("temp_study_info", ""), 
+                        st.session_state.get("temp_career_level", "")
+                    )
+                    # Refresh user object to show correct display name and status
+                    st.session_state.current_user = get_user_by_username(st.session_state.current_user["username"])
+                    st.session_state.app_page = "chatbot"
+                    st.rerun()
 
 def show_chatbot():
     # Only allow access if logged in
@@ -645,5 +736,7 @@ elif st.session_state.app_page == "signup":
     show_signup()
 elif st.session_state.app_page == "verify":
     show_verify()
+elif st.session_state.app_page == "onboarding":
+    show_onboarding()
 elif st.session_state.app_page == "chatbot":
     show_chatbot()
