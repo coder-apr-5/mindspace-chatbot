@@ -2,55 +2,131 @@ import streamlit as st
 import html
 import re
 import time
+import base64
+import os
 from utils.groq_api import get_chat_response, get_api_key
 from utils.mood_detector import detect_mood
 from utils.tip_cards import TIPS
 from utils.crisis_keywords import check_for_crisis, CRISIS_BANNER_HTML
+
+# Function to get base64 of image
+@st.cache_data
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
 
 # Page Configuration
 st.set_page_config(
     page_title="MindSpace — Student Mental Health Companion",
     page_icon="🌿",
     layout="centered",
-    initial_sidebar_state="collapsed" # Changed to collapsed initially for splash/home
+    initial_sidebar_state="collapsed"
 )
 
-# Custom styling block to override default fonts and layouts
+# Pre-load the brain image
+brain_image_path = os.path.join("assets", "intro_logo.png")
+if os.path.exists(brain_image_path):
+    brain_b64 = get_base64_of_bin_file(brain_image_path)
+    brain_img_html = f"data:image/png;base64,{brain_b64}"
+else:
+    brain_img_html = ""
+
+# Custom styling block for Student-Friendly UI
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Quicksand:wght@500;600;700&display=swap');
 
 /* Main app background and global font resets */
 .stApp {
-    background-color: #1C1F2E !important;
+    background: radial-gradient(circle at top center, #1e1c2e, #11131c) !important;
     color: #F3F4F6 !important;
+    font-family: 'Nunito', sans-serif;
 }
 
 [data-testid="stHeader"] {
-    background-color: rgba(28, 31, 46, 0.8) !important;
-    backdrop-filter: blur(8px);
+    background-color: transparent !important;
 }
 
 [data-testid="stSidebar"] {
-    background-color: #252A3D !important;
-    border-right: 1px solid #312E6B !important;
+    background-color: rgba(30, 33, 48, 0.95) !important;
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(167, 139, 250, 0.2) !important;
 }
 
-/* Headings */
+/* Headings: Soft and welcoming */
 h1, h2, h3, h4, h5, h6, .brand-title {
-    font-family: 'DM Serif Display', serif !important;
-    font-weight: 400;
+    font-family: 'Quicksand', sans-serif !important;
+    font-weight: 700;
 }
 
 /* Body and UI Elements */
-.stApp {
-    font-family: 'Inter', sans-serif;
-}
 p, label, button, input, textarea, li {
-    font-family: 'Inter', sans-serif !important;
+    font-family: 'Nunito', sans-serif !important;
 }
 
-/* Custom Chat Container styling */
+/* Interactive Brain Image Hover Effects */
+.interactive-brain {
+    transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+    filter: drop-shadow(0 0 15px rgba(167, 139, 250, 0.3));
+    cursor: pointer;
+    animation: float 6s ease-in-out infinite;
+}
+.interactive-brain:hover {
+    transform: scale(1.05) rotate(2deg);
+    filter: drop-shadow(0 0 35px rgba(167, 139, 250, 0.7)) brightness(1.1);
+}
+
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-15px); }
+    100% { transform: translateY(0px); }
+}
+
+/* Glassmorphism Cards */
+.glass-card {
+    background: rgba(37, 42, 61, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 30px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.glass-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    border-top: 2px solid #A78BFA;
+}
+
+/* Splash Customizations */
+.splash-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 80vh;
+    animation: fadeInOut 4s ease-in-out;
+}
+.splash-image {
+    width: 320px;
+    height: auto;
+    border-radius: 50%;
+    animation: pulseGlow 2.5s infinite alternate;
+}
+@keyframes pulseGlow {
+    from { box-shadow: 0 0 30px rgba(167, 139, 250, 0.3); transform: scale(0.98); }
+    to { box-shadow: 0 0 70px rgba(167, 139, 250, 0.8); transform: scale(1.03); }
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: scale(0.9); }
+    15% { opacity: 1; transform: scale(1); }
+    85% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.1); }
+}
+
+/* Chat Log Spacing */
 .chat-log {
     margin-top: 10px;
     margin-bottom: 80px;
@@ -64,9 +140,9 @@ p, label, button, input, textarea, li {
     justify-content: center;
     margin: 15px auto;
     padding: 20px;
-    background: #1C1F2E;
-    border-radius: 12px;
-    border: 1px solid #312E6B;
+    background: rgba(28, 31, 46, 0.6);
+    border-radius: 16px;
+    border: 1px solid rgba(167, 139, 250, 0.3);
     max-width: 320px;
     text-align: center;
 }
@@ -87,7 +163,7 @@ p, label, button, input, textarea, li {
 }
 .breathe-text {
     margin-top: 15px;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 15px;
     color: #A78BFA;
     height: 20px;
@@ -109,53 +185,14 @@ p, label, button, input, textarea, li {
     75%, 100% { content: "🛑 Hold (4s)"; }
 }
 
-/* Splash and Home Customizations */
-.splash-container {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 70vh;
-    background: transparent;
-    color: #A78BFA;
-    animation: fadeInOut 4s ease-in-out;
-}
-.splash-logo {
-    font-family: 'DM Serif Display', serif;
-    font-size: 6rem;
-    animation: pulse 2s infinite, glow 2s infinite alternate;
-}
-.splash-tagline {
-    font-family: 'Inter', sans-serif;
-    font-size: 1.5rem;
-    color: #E5E7EB;
-    margin-top: 20px;
-    opacity: 0;
-    animation: slideUp 1s ease-out 1s forwards;
-}
-@keyframes fadeInOut {
-    0% { opacity: 0; }
-    15% { opacity: 1; }
-    85% { opacity: 1; }
-    100% { opacity: 0; }
-}
-@keyframes pulse {
-    0% { transform: scale(0.95); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(0.95); }
-}
-@keyframes glow {
-    from { text-shadow: 0 0 10px #A78BFA, 0 0 20px #A78BFA, 0 0 30px #A78BFA; }
-    to { text-shadow: 0 0 20px #C084FC, 0 0 30px #C084FC, 0 0 40px #C084FC; }
-}
-@keyframes slideUp {
-    from { transform: translateY(20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+/* Auth Pages Inputs */
+div[data-baseweb="input"] {
+    border-radius: 12px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Mood Metadata for Emoji, Labels, and Theme Colors
+# Mood Metadata
 MOOD_METADATA = {
     "happy": {"emoji": "😊", "label": "Happy", "color": "#34D399"},
     "neutral": {"emoji": "😐", "label": "Neutral", "color": "#94A3B8"},
@@ -167,22 +204,11 @@ MOOD_METADATA = {
 }
 
 def markdown_to_html(text: str) -> str:
-    """
-    Safely escapes text and parses basic Markdown rules (bold, italics, bullets, newlines)
-    for rendering inside custom HTML bubbles.
-    """
-    # 1. Escape HTML
     escaped = html.escape(text)
-    
-    # 2. Convert bold (supports **bold** and __bold__)
     escaped = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', escaped)
     escaped = re.sub(r'__(.*?)__', r'<strong>\1</strong>', escaped)
-    
-    # 3. Convert italics (supports *italic* and _italic_)
     escaped = re.sub(r'\*(.*?)\*', r'<em>\1</em>', escaped)
     escaped = re.sub(r'_(.*?)_', r'<em>\1</em>', escaped)
-    
-    # 4. Handle bullets
     lines = escaped.split('\n')
     for i, line in enumerate(lines):
         stripped = line.strip()
@@ -190,10 +216,7 @@ def markdown_to_html(text: str) -> str:
             lines[i] = f"• {stripped[2:]}"
         elif stripped.startswith('* '):
             lines[i] = f"• {stripped[2:]}"
-            
     escaped = '\n'.join(lines)
-    
-    # 5. Convert newlines to breaks
     escaped = escaped.replace('\n', '<br>')
     return escaped
 
@@ -223,51 +246,58 @@ if "skipped_tips" not in st.session_state:
 # ==========================================
 
 def show_intro():
-    st.markdown("""
+    st.markdown(f"""
     <div class="splash-container">
-        <div class="splash-logo">🌿 MindSpace</div>
-        <div class="splash-tagline">Your Student Mental Health Companion</div>
+        <img src="{brain_img_html}" class="splash-image" alt="MindSpace Brain" />
     </div>
     """, unsafe_allow_html=True)
-    
-    # The sleep keeps the splash screen visible for 4 seconds
     time.sleep(4)
     st.session_state.app_page = "home"
     st.rerun()
 
 def show_home():
-    st.markdown("""
-    <div style='text-align: center; margin-top: 50px;'>
-        <h1 style='font-size: 4rem; color: #A78BFA; margin-bottom: 10px;'>Welcome to MindSpace</h1>
-        <p style='font-size: 1.2rem; color: #94A3B8; max-width: 600px; margin: 0 auto 40px auto; line-height: 1.6;'>
-            A safe, judgment-free AI companion designed to help you navigate stress, anxiety, and the challenges of student life.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 1.5, 1])
+    col1, col2 = st.columns([1.2, 1], gap="large")
+    
+    with col1:
+        st.markdown("""
+        <h1 style='font-size: 3.8rem; color: #E5E7EB; margin-bottom: 5px; line-height: 1.1;'>Find Your<br><span style='color: #A78BFA;'>MindSpace</span></h1>
+        <p style='font-size: 1.15rem; color: #94A3B8; margin-bottom: 30px; margin-top: 15px; line-height: 1.6;'>
+            A safe, judgment-free AI companion designed with psychology in mind to help you navigate stress, anxiety, and the challenges of student life.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 0.5])
+        with btn_col1:
+            if st.button("Log In", use_container_width=True, type="primary"):
+                st.session_state.app_page = "login"
+                st.rerun()
+        with btn_col2:
+            if st.button("Sign Up", use_container_width=True):
+                st.session_state.app_page = "signup"
+                st.rerun()
+                
     with col2:
-        if st.button("Log In", use_container_width=True, type="primary"):
-            st.session_state.app_page = "login"
-            st.rerun()
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Sign Up", use_container_width=True):
-            st.session_state.app_page = "signup"
-            st.rerun()
+        st.markdown(f"""
+        <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
+            <img src="{brain_img_html}" class="interactive-brain" style="width: 100%; max-width: 350px; border-radius: 50%;" />
+        </div>
+        """, unsafe_allow_html=True)
         
     st.markdown("""
     <div style='display: flex; justify-content: space-between; gap: 20px; margin-top: 80px; flex-wrap: wrap;'>
-        <div style='background: #252A3D; padding: 25px; border-radius: 12px; flex: 1; min-width: 200px; border-top: 4px solid #34D399; box-shadow: 0 4px 6px rgba(0,0,0,0.2);'>
-            <h3 style='color: #34D399; margin-top: 0;'>Listen 👂</h3>
-            <p style='font-size: 15px; color: #E5E7EB; line-height: 1.5;'>Always here to listen to your thoughts without judgment, 24/7.</p>
+        <div class='glass-card' style='flex: 1; min-width: 200px;'>
+            <h3 style='color: #34D399; margin-top: 0;'>Listen 🌿</h3>
+            <p style='font-size: 15px; color: #E5E7EB; line-height: 1.6;'>Always here to listen to your thoughts without judgment, 24/7.</p>
         </div>
-        <div style='background: #252A3D; padding: 25px; border-radius: 12px; flex: 1; min-width: 200px; border-top: 4px solid #F59E0B; box-shadow: 0 4px 6px rgba(0,0,0,0.2);'>
+        <div class='glass-card' style='flex: 1; min-width: 200px;'>
             <h3 style='color: #F59E0B; margin-top: 0;'>Understand 🧠</h3>
-            <p style='font-size: 15px; color: #E5E7EB; line-height: 1.5;'>Detects your mood intelligently and adapts its responses to support you best.</p>
+            <p style='font-size: 15px; color: #E5E7EB; line-height: 1.6;'>Detects your mood intelligently and adapts its responses to support you best.</p>
         </div>
-        <div style='background: #252A3D; padding: 25px; border-radius: 12px; flex: 1; min-width: 200px; border-top: 4px solid #60A5FA; box-shadow: 0 4px 6px rgba(0,0,0,0.2);'>
+        <div class='glass-card' style='flex: 1; min-width: 200px;'>
             <h3 style='color: #60A5FA; margin-top: 0;'>Guide 🧭</h3>
-            <p style='font-size: 15px; color: #E5E7EB; line-height: 1.5;'>Provides quick relief exercises like guided box breathing and journaling.</p>
+            <p style='font-size: 15px; color: #E5E7EB; line-height: 1.6;'>Provides quick relief exercises like guided box breathing and journaling.</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -288,7 +318,7 @@ def show_login():
             else:
                 st.error("Please enter both username and password.")
         
-        st.markdown("<hr style='border-color: #312E6B; margin: 30px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2); margin: 30px 0;'>", unsafe_allow_html=True)
         if st.button("Back to Home", use_container_width=True):
             st.session_state.app_page = "home"
             st.rerun()
@@ -310,37 +340,29 @@ def show_signup():
             else:
                 st.error("Please fill all fields to create an account.")
                 
-        st.markdown("<hr style='border-color: #312E6B; margin: 30px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2); margin: 30px 0;'>", unsafe_allow_html=True)
         if st.button("Back to Home", use_container_width=True):
             st.session_state.app_page = "home"
             st.rerun()
 
 def show_chatbot():
-    # Inject CSS to force sidebar to expand if possible, though Streamlit 
-    # doesn't support programmatic expansion easily after initial load.
-    # However, users can click the > button. We'll leave it to them or 
-    # assume they'll open it if needed.
-    
-    # SIDEBAR IMPLEMENTATION
     with st.sidebar:
         st.markdown("<h1 class='brand-title' style='margin-bottom: 0; color: #A78BFA;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='font-style: italic; color: #94A3B8; margin-top: 0; margin-bottom: 25px;'>Your student mental health companion</p>", unsafe_allow_html=True)
-        st.markdown("<hr style='border: 1px solid #312E6B;'>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 13px; color: #94A3B8; margin-top: 0; margin-bottom: 25px;'>Your mental health companion</p>", unsafe_allow_html=True)
+        st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
-        # Mood History Timeline
         st.markdown("<h3 style='color: #A78BFA; font-size: 18px; margin-bottom: 10px;'>📈 Mood Timeline</h3>", unsafe_allow_html=True)
         if st.session_state.mood_history:
             trail_parts = []
-            # Take the last 6 moods from the list
             last_moods = st.session_state.mood_history[-6:]
             for m in last_moods:
                 meta = MOOD_METADATA.get(m["mood"], MOOD_METADATA["neutral"])
                 trail_parts.append(f"{meta['emoji']} {meta['label']}")
             trail_str = " → ".join(trail_parts)
             st.markdown(
-                f"<div style='font-size: 13px; color: #E5E7EB; background-color: #1C1F2E; "
-                f"padding: 12px; border-radius: 8px; border: 1px solid #312E6B; "
-                f"line-height: 1.5; word-break: break-word;'>"
+                f"<div style='font-size: 13px; color: #E5E7EB; background-color: rgba(28, 31, 46, 0.5); "
+                f"padding: 12px; border-radius: 12px; border: 1px solid rgba(167, 139, 250, 0.2); "
+                f"line-height: 1.6; word-break: break-word;'>"
                 f"{trail_str}"
                 f"</div>",
                 unsafe_allow_html=True
@@ -348,11 +370,10 @@ def show_chatbot():
         else:
             st.markdown("<p style='font-size: 13px; color: #94A3B8; font-style: italic;'>No moods recorded yet. Start chatting!</p>", unsafe_allow_html=True)
             
-        st.markdown("<hr style='border: 1px solid #312E6B;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
-        # Quick-Relief Buttons
         st.markdown("<h3 style='color: #A78BFA; font-size: 18px; margin-bottom: 10px;'>⚡ Quick Relief</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size: 12px; color: #94A3B8; margin-bottom: 15px;'>Need to unwind right now? Trigger a quick exercise inline:</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 13px; color: #94A3B8; margin-bottom: 15px;'>Need to unwind right now?</p>", unsafe_allow_html=True)
         
         if st.button("💨 Box Breathing", use_container_width=True):
             st.session_state.messages.append({
@@ -381,11 +402,9 @@ def show_chatbot():
             })
             st.rerun()
             
-        st.markdown("<hr style='border: 1px solid #312E6B;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
-        # Reset Session Button
         if st.button("🗑️ Clear Session", use_container_width=True):
-            # Reset only chatbot state, not authentication/page
             st.session_state.messages = [
                 {
                     "role": "assistant",
@@ -400,30 +419,23 @@ def show_chatbot():
             st.session_state.skipped_tips = []
             st.rerun()
             
-        # Logout Button
         if st.button("🚪 Log Out", use_container_width=True):
             st.session_state.app_page = "home"
             st.rerun()
             
-        # Disclaimer Text
         st.markdown(
-            "<div style='font-size: 11px; color: #94A3B8; margin-top: 30px; border-top: 1px solid #312E6B; padding-top: 15px; line-height: 1.4;'>"
-            "⚠️ <strong>Disclaimer</strong>: MindSpace is not a substitute for professional mental health care, clinical therapy, or medical diagnosis. "
-            "Always encourage professional help for serious concerns."
+            "<div style='font-size: 12px; color: #94A3B8; margin-top: 30px; border-top: 1px solid rgba(167, 139, 250, 0.2); padding-top: 15px; line-height: 1.5;'>"
+            "⚠️ <strong>Disclaimer</strong>: MindSpace is not a substitute for professional medical advice or clinical therapy."
             "</div>",
             unsafe_allow_html=True
         )
 
-    # MAIN CHAT APPLICATION
+    # MAIN CHAT
+    st.markdown("<h1 style='margin-top: 0; color: #A78BFA; font-size: 2.8rem;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
     
-    # Header Title
-    st.markdown("<h1 style='margin-top: 0; color: #A78BFA; font-size: 2.5rem;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
-    
-    # 1. CRISIS SAFETY BANNER (Rendered at top of main view if triggered)
     if st.session_state.crisis_triggered:
         st.markdown(CRISIS_BANNER_HTML, unsafe_allow_html=True)
     
-    # 2. LIVE MOOD BADGE
     current_mood_data = st.session_state.current_mood
     meta = MOOD_METADATA.get(current_mood_data["mood"], MOOD_METADATA["neutral"])
     intensity_label = current_mood_data["intensity"].upper()
@@ -432,23 +444,22 @@ def show_chatbot():
     <div style="
         display: inline-flex;
         align-items: center;
-        background-color: {meta['color']}1A; /* 10% opacity */
+        background-color: {meta['color']}1A;
         border: 1px solid {meta['color']};
         color: {meta['color']};
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 30px;
+        font-size: 14px;
+        font-weight: 700;
         margin-bottom: 20px;
     ">
-        <span style="margin-right: 6px; font-size: 15px;">{meta['emoji']}</span>
-        Current State: {meta['label']} ({intensity_label} Intensity)
+        <span style="margin-right: 8px; font-size: 16px;">{meta['emoji']}</span>
+        Current State: {meta['label']} ({intensity_label})
     </div>
     """
     st.markdown(badge_html, unsafe_allow_html=True)
     
-    # Manual Mood Selector Buttons
-    st.markdown("<p style='font-size: 12px; color: #94A3B8; margin-bottom: 5px; font-weight: 500;'>How are you feeling right now? Tap to tell MindSpace:</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size: 13px; color: #94A3B8; margin-bottom: 8px; font-weight: 600;'>How are you feeling right now?</p>", unsafe_allow_html=True)
     mood_cols = st.columns(len(MOOD_METADATA))
     for col, (mood_key, m_meta) in zip(mood_cols, MOOD_METADATA.items()):
         with col:
@@ -457,60 +468,55 @@ def show_chatbot():
                 st.session_state.mood_history.append({"mood": mood_key, "intensity": "medium"})
                 st.rerun()
     
-    # Render Chat Log
     chat_placeholder = st.container()
-    
     with chat_placeholder:
         for idx, msg in enumerate(st.session_state.messages):
             role = msg["role"]
             content_html = markdown_to_html(msg["content"])
             
             if role == "user":
-                # Right-aligned purple-tint bubble
                 st.markdown(f"""
-                <div style="display: flex; justify-content: flex-end; width: 100%; margin: 10px 0;">
+                <div style="display: flex; justify-content: flex-end; width: 100%; margin: 15px 0;">
                     <div style="
-                        background-color: #312E6B;
+                        background-color: rgba(167, 139, 250, 0.2);
                         color: #F5F3FF;
-                        padding: 12px 18px;
-                        border-radius: 18px 18px 0px 18px;
-                        max-width: 75%;
-                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-                        font-size: 15px;
-                        line-height: 1.5;
+                        padding: 14px 20px;
+                        border-radius: 20px 20px 4px 20px;
+                        border: 1px solid rgba(167, 139, 250, 0.4);
+                        max-width: 80%;
+                        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+                        font-size: 15.5px;
+                        line-height: 1.6;
                     ">
                         {content_html}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
             else:
-                # Left-aligned dark card with lavender left border
                 st.markdown(f"""
-                <div style="display: flex; justify-content: flex-start; width: 100%; margin: 10px 0;">
+                <div style="display: flex; justify-content: flex-start; width: 100%; margin: 15px 0;">
                     <div style="
-                        background-color: #252A3D;
+                        background-color: rgba(37, 42, 61, 0.7);
+                        backdrop-filter: blur(10px);
                         color: #E5E7EB;
-                        padding: 12px 18px;
-                        border-radius: 18px 18px 18px 0px;
-                        border-left: 3px solid #A78BFA;
-                        max-width: 75%;
-                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-                        font-size: 15px;
-                        line-height: 1.5;
+                        padding: 14px 20px;
+                        border-radius: 20px 20px 20px 4px;
+                        border-left: 4px solid #A78BFA;
+                        max-width: 80%;
+                        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+                        font-size: 15.5px;
+                        line-height: 1.6;
                     ">
                         {content_html}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Show Tip Card if flag is set for this message
                 if msg.get("show_tip") and msg.get("tip_mood") in TIPS:
                     tip_mood = msg.get("tip_mood")
                     tip = TIPS[tip_mood]
                     tip_content_html = markdown_to_html(tip["content"])
                     
-                    # Check for breathing visualizer HTML
                     breathe_viz_html = ""
                     if tip_mood == "anxious":
                         breathe_viz_html = """
@@ -523,18 +529,18 @@ def show_chatbot():
                         """
                     
                     st.markdown(f"""
-                    <div style="display: flex; justify-content: flex-start; width: 100%; margin: -4px 0 6px 0;">
+                    <div style="display: flex; justify-content: flex-start; width: 100%; margin: -6px 0 10px 0;">
                         <details open style="
-                            background-color: #252A3D;
-                            border: 1px solid #A78BFA;
-                            border-radius: 8px;
-                            padding: 12px 16px;
-                            width: 75%;
+                            background-color: rgba(37, 42, 61, 0.7);
+                            border: 1px solid rgba(167, 139, 250, 0.5);
+                            border-radius: 12px;
+                            padding: 14px 18px;
+                            width: 80%;
                             color: #E5E7EB;
-                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
                         ">
                             <summary style="
-                                font-weight: 600;
+                                font-weight: 700;
                                 cursor: pointer;
                                 color: #A78BFA;
                                 outline: none;
@@ -543,9 +549,9 @@ def show_chatbot():
                             ">
                                 💡 Recommended Exercise
                             </summary>
-                            <div style="margin-top: 10px; font-size: 14px; line-height: 1.5; border-top: 1px solid #312E6B; padding-top: 10px;">
-                                <strong style="font-size: 15px; color: #F3F4F6;">{tip['title']}</strong>
-                                <p style="margin: 4px 0 10px 0; color: #94A3B8; font-style: italic;">{tip['description']}</p>
+                            <div style="margin-top: 12px; font-size: 15px; line-height: 1.6; border-top: 1px solid rgba(167, 139, 250, 0.2); padding-top: 12px;">
+                                <strong style="font-size: 16px; color: #F3F4F6;">{tip['title']}</strong>
+                                <p style="margin: 6px 0 12px 0; color: #94A3B8; font-style: italic;">{tip['description']}</p>
                                 {tip_content_html}
                                 {breathe_viz_html}
                             </div>
@@ -553,11 +559,10 @@ def show_chatbot():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Feedback options row for this message
                     fb_col1, fb_col2, fb_col3 = st.columns([2, 2, 3])
                     with fb_col1:
                         if msg.get("feedback_given") == "helpful":
-                            st.markdown("<p style='color: #34D399; font-size: 13px; font-weight: 600; margin-top: 8px; margin-bottom: 12px;'>Glad that helped! 💜</p>", unsafe_allow_html=True)
+                            st.markdown("<p style='color: #34D399; font-size: 14px; font-weight: 700; margin-top: 8px;'>Glad that helped! 💜</p>", unsafe_allow_html=True)
                         elif msg.get("feedback_given") == "try_another":
                             pass
                         else:
@@ -572,62 +577,42 @@ def show_chatbot():
                                     st.session_state.skipped_tips = []
                                 if tip_mood not in st.session_state.skipped_tips:
                                     st.session_state.skipped_tips.append(tip_mood)
-                                
                                 remaining = [k for k in all_tip_keys if k not in st.session_state.skipped_tips]
                                 if not remaining:
                                     st.session_state.skipped_tips = [tip_mood]
                                     remaining = [k for k in all_tip_keys if k != tip_mood]
-                                
                                 next_mood = remaining[0] if remaining else tip_mood
                                 msg["tip_mood"] = next_mood
                                 st.rerun()
     
-    # User Input Box
     user_input = st.chat_input("Talk to MindSpace...")
-    
     if user_input:
-        # 1. Immediate Safety Check (Crisis scan)
         if check_for_crisis(user_input):
             st.session_state.crisis_triggered = True
-            
-        # 2. Append User Message
         st.session_state.messages.append({"role": "user", "content": user_input})
-        
-        # 3. Dynamic Mood Classification & Timeline Addition
-        # We pass the conversation history (including this new message) to Groq
         detected = detect_mood(st.session_state.messages)
         st.session_state.current_mood = detected
-        
-        # Only append to timeline if it represents actual change or new info (we track all interactions)
         st.session_state.mood_history.append(detected)
         
-        # 4. Generate AI reply with spinner
         with st.spinner("MindSpace is listening..."):
             ai_reply = get_chat_response(st.session_state.messages)
             
-        # 5. Determine if we should recommend a relaxation card
-        # Should recommend on medium/high negative states
         negative_moods = ["anxious", "sad", "stressed", "lonely", "overwhelmed"]
         show_tip = False
         if detected["mood"] in negative_moods and detected["intensity"] in ["medium", "high"]:
             show_tip = True
             
-        # 6. Append Assistant Reply
         st.session_state.messages.append({
             "role": "assistant",
             "content": ai_reply,
             "show_tip": show_tip,
             "tip_mood": detected["mood"]
         })
-        
-        # Trigger Streamlit rerun to display updates
         st.rerun()
-
 
 # ==========================================
 # MAIN EXECUTION
 # ==========================================
-
 if st.session_state.app_page == "intro":
     show_intro()
 elif st.session_state.app_page == "home":
