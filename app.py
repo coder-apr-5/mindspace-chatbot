@@ -261,6 +261,9 @@ def show_intro():
     st.markdown(f"""
     <div class="splash-container">
         <img src="{brain_img_html}" class="splash-image" alt="MindSpace Brain" />
+        <h2 style="color: #A78BFA; font-family: 'Quicksand', sans-serif; font-size: 1.8rem; margin-top: 30px; font-weight: 600; letter-spacing: 1.5px; text-shadow: 0 0 15px rgba(167, 139, 250, 0.4);">
+            Your Safe Space for Mental Clarity
+        </h2>
     </div>
     """, unsafe_allow_html=True)
     time.sleep(4)
@@ -438,7 +441,7 @@ def show_onboarding():
 
     st.markdown("<h2 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 2.5rem;'>Let's Get to Know You</h2>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 1.5, 1])
+    col1, col2, col3 = st.columns([1, 2.5, 1])
     with col2:
         if st.session_state.onboarding_step == 1:
             st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 1 of 3: The Basics</p>", unsafe_allow_html=True)
@@ -452,7 +455,8 @@ def show_onboarding():
         elif st.session_state.onboarding_step == 2:
             st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 2 of 3: Your Academic Life</p>", unsafe_allow_html=True)
             career_level = st.selectbox("What is your current level?", ["School", "Undergraduate (UG)", "Postgraduate (PG)", "Professional", "Other"])
-            study_info = st.text_input("What & where are you studying/working?", placeholder="e.g. B.Tech CS at MIT")
+            study_what = st.text_input("What are you studying or working on?", placeholder="e.g. B.Tech Computer Science")
+            study_where = st.text_input("Where are you studying or working?", placeholder="e.g. Massachusetts Institute of Technology")
             
             st.markdown("<br>", unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
@@ -463,19 +467,27 @@ def show_onboarding():
             with col_b2:
                 if st.button("Next Step ➔", use_container_width=True, type="primary"):
                     st.session_state.temp_career_level = career_level
-                    st.session_state.temp_study_info = study_info
+                    if study_what and study_where:
+                        st.session_state.temp_study_info = f"{study_what} at {study_where}"
+                    elif study_what:
+                        st.session_state.temp_study_info = study_what
+                    elif study_where:
+                        st.session_state.temp_study_info = study_where
+                    else:
+                        st.session_state.temp_study_info = "Not specified"
+                        
                     st.session_state.onboarding_step = 3
                     st.rerun()
                     
         elif st.session_state.onboarding_step == 3:
             st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 20px;'>Step 3 of 3: Welcome</p>", unsafe_allow_html=True)
             st.markdown("""
-            <div style="background-color: rgba(37, 42, 61, 0.5); padding: 25px; border-radius: 15px; border: 1px solid rgba(167, 139, 250, 0.3); text-align: center;">
-                <h3 style="color: #F3F4F6; font-size: 1.5rem; margin-top: 0;">Welcome to MindSpace! 🌿</h3>
-                <p style="color: #E5E7EB; line-height: 1.6; margin-bottom: 20px;">
+            <div style="background-color: rgba(37, 42, 61, 0.5); padding: 35px; border-radius: 15px; border: 1px solid rgba(167, 139, 250, 0.3); text-align: center;">
+                <h3 style="color: #F3F4F6; font-size: 1.8rem; margin-top: 0;">Welcome to MindSpace! 🌿</h3>
+                <p style="color: #E5E7EB; line-height: 1.8; margin-bottom: 25px; font-size: 1.1rem;">
                     We believe that mental well-being is the foundation of a successful life. MindSpace is built to be your trusted, confidential, and judgment-free companion. Here, your thoughts are safe, your feelings are valid, and support is always just a message away.
                 </p>
-                <p style="color: #A78BFA; font-weight: 600;">You are never alone on this journey.</p>
+                <p style="color: #A78BFA; font-weight: 600; font-size: 1.15rem;">You are never alone on this journey.</p>
             </div>
             """, unsafe_allow_html=True)
             
