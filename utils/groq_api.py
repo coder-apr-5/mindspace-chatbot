@@ -68,7 +68,7 @@ def get_chat_response(conversation_history: list, user_data: dict = None) -> str
                 recent_moods = [m["mood"] if isinstance(m, dict) else str(m) for m in st.session_state.mood_history[-5:]]
                 dynamic_prompt += f"- Recent Mood History: {', '.join(recent_moods)}\n"
 
-            dynamic_prompt += "\nUse this context to personalize your responses naturally. Mention their name occasionally, and tailor advice to their career/study level. Reference their recent mood trends if appropriate."
+            dynamic_prompt += "\nIMPORTANT INSTRUCTION: Do NOT awkwardly list out or summarize all the user's background details (age, career, gender, mood) in your responses. Keep your greetings natural. Use this background information subtly to inform your advice, or provide it ONLY if the user explicitly asks about their profile or history."
 
         # Inject real-time clock
         now = datetime.datetime.now()
