@@ -175,6 +175,12 @@ st.markdown("""
     font-family: 'Nunito', sans-serif;
 }
 
+[data-testid="block-container"] {
+    max-width: 100% !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+}
+
 [data-testid="stHeader"] {
     background-color: transparent !important;
 }
