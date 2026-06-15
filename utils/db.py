@@ -17,11 +17,22 @@ def init_db():
             password_hash TEXT,
             auth_provider TEXT DEFAULT 'manual',
             is_verified BOOLEAN DEFAULT 0,
-            display_name TEXT
+            display_name TEXT,
+            dob TEXT,
+            study_info TEXT,
+            career_level TEXT,
+            onboarding_completed BOOLEAN DEFAULT 0
         )
     ''')
     try:
         c.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN dob TEXT')
+        c.execute('ALTER TABLE users ADD COLUMN study_info TEXT')
+        c.execute('ALTER TABLE users ADD COLUMN career_level TEXT')
+        c.execute('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0')
     except sqlite3.OperationalError:
         pass
     conn.commit()
@@ -47,7 +58,7 @@ def create_user(username, email, password_hash, auth_provider='manual', is_verif
 def get_user_by_username(username):
     conn = get_connection()
     c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE username = ?', (username,))
+    c.execute('SELECT id, username, email, password_hash, auth_provider, is_verified, display_name, dob, study_info, career_level, onboarding_completed FROM users WHERE username = ?', (username,))
     user = c.fetchone()
     conn.close()
     if user:
@@ -58,14 +69,18 @@ def get_user_by_username(username):
             "password_hash": user[3],
             "auth_provider": user[4],
             "is_verified": bool(user[5]),
-            "display_name": user[6] if len(user) > 6 and user[6] else user[1]
+            "display_name": user[6] if len(user) > 6 and user[6] else user[1],
+            "dob": user[7] if len(user) > 7 else None,
+            "study_info": user[8] if len(user) > 8 else None,
+            "career_level": user[9] if len(user) > 9 else None,
+            "onboarding_completed": bool(user[10]) if len(user) > 10 else False
         }
     return None
 
 def get_user_by_email(email):
     conn = get_connection()
     c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE email = ?', (email,))
+    c.execute('SELECT id, username, email, password_hash, auth_provider, is_verified, display_name, dob, study_info, career_level, onboarding_completed FROM users WHERE email = ?', (email,))
     user = c.fetchone()
     conn.close()
     if user:
@@ -76,9 +91,24 @@ def get_user_by_email(email):
             "password_hash": user[3],
             "auth_provider": user[4],
             "is_verified": bool(user[5]),
-            "display_name": user[6] if len(user) > 6 and user[6] else user[1]
+            "display_name": user[6] if len(user) > 6 and user[6] else user[1],
+            "dob": user[7] if len(user) > 7 else None,
+            "study_info": user[8] if len(user) > 8 else None,
+            "career_level": user[9] if len(user) > 9 else None,
+            "onboarding_completed": bool(user[10]) if len(user) > 10 else False
         }
     return None
+
+def update_user_onboarding(username, dob, study_info, career_level):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('''
+        UPDATE users 
+        SET dob = ?, study_info = ?, career_level = ?, onboarding_completed = 1 
+        WHERE username = ?
+    ''', (dob, study_info, career_level, username))
+    conn.commit()
+    conn.close()
 
 def verify_user(username):
     conn = get_connection()
