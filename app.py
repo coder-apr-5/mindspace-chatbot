@@ -50,6 +50,57 @@ def get_google_button_html():
     </style>
     """
 
+ROBOT_SVG_HTML = """
+<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="botGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8B5CF6;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="15" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <g transform="translate(0, 20)">
+    <!-- Antenna -->
+    <line x1="200" y1="80" x2="200" y2="40" stroke="#A78BFA" stroke-width="6" />
+    <circle cx="200" cy="30" r="12" fill="#FDE047" filter="url(#glow)" />
+    
+    <!-- Head -->
+    <rect x="120" y="80" width="160" height="120" rx="40" fill="url(#botGrad)" filter="url(#glow)" />
+    <!-- Screen/Face -->
+    <rect x="140" y="100" width="120" height="70" rx="20" fill="#1E1E2F" />
+    
+    <!-- Eyes -->
+    <circle cx="170" cy="135" r="10" fill="#FDE047">
+      <animate attributeName="ry" values="10; 2; 10" dur="4s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="230" cy="135" r="10" fill="#FDE047">
+      <animate attributeName="ry" values="10; 2; 10" dur="4s" repeatCount="indefinite" />
+    </circle>
+    
+    <!-- Smile -->
+    <path d="M180 155 Q 200 165 220 155" fill="none" stroke="#FDE047" stroke-width="4" stroke-linecap="round" />
+    
+    <!-- Body -->
+    <path d="M140 220 L260 220 L280 320 L120 320 Z" fill="url(#botGrad)" filter="url(#glow)" />
+    
+    <!-- Heart/Core -->
+    <path d="M200 250 L210 240 A 10 10 0 0 1 225 255 L200 280 L175 255 A 10 10 0 0 1 190 240 Z" fill="#FDE047" filter="url(#glow)">
+      <animate attributeName="transform" type="scale" values="1; 1.1; 1" dur="2s" repeatCount="indefinite" additive="sum" />
+    </path>
+    
+    <!-- Arms -->
+    <path d="M120 230 Q 80 260 90 300" fill="none" stroke="#A78BFA" stroke-width="15" stroke-linecap="round" />
+    <path d="M280 230 Q 320 260 310 300" fill="none" stroke="#A78BFA" stroke-width="15" stroke-linecap="round" />
+  </g>
+</svg>
+"""
+
+ROBOT_SVG_B64 = base64.b64encode(ROBOT_SVG_HTML.encode('utf-8')).decode('utf-8')
+
 def authenticate_google_code(code):
     redirect_uri = "http://localhost:8501"
     token_url = "https://oauth2.googleapis.com/token"
@@ -94,7 +145,7 @@ if "code" in st.query_params:
                 user = get_user_by_email(email)
                 
             st.session_state.current_user = user
-            if not user.get('onboarding_completed', False):
+            if not user.get('onboarding_completed', False) or not user.get('bot_name'):
                 st.session_state.app_page = "onboarding"
             else:
                 st.session_state.app_page = "chatbot"
@@ -317,12 +368,14 @@ def show_home():
     """, unsafe_allow_html=True)
 
 def show_login():
-    st.markdown("<h2 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 2.5rem;'>Welcome Back</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 40px;'>Log in to continue your journey.</p>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        username_or_email = st.text_input("Username or Email", placeholder="Enter your username")
+    col_img, col_form = st.columns([1, 1], gap="large")
+    with col_img:
+        st.markdown(f'<div style="display:flex; justify-content:center; align-items:center; height:100%; margin-top:50px; max-width: 400px;"><img src="data:image/svg+xml;base64,{ROBOT_SVG_B64}" style="width:100%;"></div>', unsafe_allow_html=True)
+        
+    with col_form:
+        st.markdown("<h1 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 3rem;'>Welcome Back</h1>", unsafe_allow_html=True)
+        
+        username_or_email = st.text_input("Username or Email", key="login_username", placeholder="Enter your username")
         password = st.text_input("Password", type="password", placeholder="Enter your password")
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -337,7 +390,7 @@ def show_login():
                     else:
                         if verify_password(password, user['password_hash']):
                             st.session_state.current_user = user
-                            if not user.get('onboarding_completed', False):
+                            if not user.get('onboarding_completed', False) or not user.get('bot_name'):
                                 st.session_state.app_page = "onboarding"
                             else:
                                 st.session_state.app_page = "chatbot"
@@ -357,12 +410,14 @@ def show_login():
             st.rerun()
 
 def show_signup():
-    st.markdown("<h2 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 2.5rem;'>Create an Account</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 40px;'>Join MindSpace to start focusing on your well-being.</p>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        username = st.text_input("Choose Username", placeholder="e.g. mindful_student")
+    col_img, col_form = st.columns([1, 1], gap="large")
+    with col_img:
+        st.markdown(f'<div style="display:flex; justify-content:center; align-items:center; height:100%; margin-top:50px; max-width: 400px;"><img src="data:image/svg+xml;base64,{ROBOT_SVG_B64}" style="width:100%;"></div>', unsafe_allow_html=True)
+        
+    with col_form:
+        st.markdown("<h1 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 3rem;'>Create Account</h1>", unsafe_allow_html=True)
+        
+        username = st.text_input("Choose a Username", key="signup_username", placeholder="e.g. mindful_student")
         email = st.text_input("Email Address", placeholder="you@university.edu")
         password = st.text_input("Create Password", type="password", placeholder="Strong password")
         
@@ -426,7 +481,7 @@ def show_verify():
                 st.session_state.current_user = user
                 st.success("Email verified successfully!")
                 time.sleep(1)
-                if not user.get('onboarding_completed', False):
+                if not user.get('onboarding_completed', False) or not user.get('bot_name'):
                     st.session_state.app_page = "onboarding"
                 else:
                     st.session_state.app_page = "chatbot"
@@ -436,14 +491,17 @@ def show_verify():
 
 def show_onboarding():
     if "onboarding_step" not in st.session_state:
-        st.session_state.onboarding_step = 1
+        if st.session_state.current_user and st.session_state.current_user.get('onboarding_completed') and not st.session_state.current_user.get('bot_name'):
+            st.session_state.onboarding_step = 3
+        else:
+            st.session_state.onboarding_step = 1
 
     st.markdown("<h2 style='text-align: center; color: #A78BFA; margin-top: 50px; font-size: 2.5rem;'>Let's Get to Know You</h2>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2.5, 1])
     with col2:
         if st.session_state.onboarding_step == 1:
-            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 1 of 3: The Basics</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 1 of 4: The Basics</p>", unsafe_allow_html=True)
             dob = st.date_input("When is your Birthday?", min_value=datetime.date(1950, 1, 1), max_value=datetime.date.today(), value=datetime.date(2005, 1, 1))
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Next Step ➔", use_container_width=True, type="primary"):
@@ -452,7 +510,7 @@ def show_onboarding():
                 st.rerun()
                 
         elif st.session_state.onboarding_step == 2:
-            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 2 of 3: Your Academic Life</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 30px;'>Step 2 of 4: Your Academic Life</p>", unsafe_allow_html=True)
             career_level = st.selectbox("What is your current level?", ["School", "Undergraduate (UG)", "Postgraduate (PG)", "Professional", "Other"])
             study_what = st.text_input("What are you studying or working on?", placeholder="e.g. B.Tech Computer Science")
             study_where = st.text_input("Where are you studying or working?", placeholder="e.g. Massachusetts Institute of Technology")
@@ -477,14 +535,35 @@ def show_onboarding():
                         
                     st.session_state.onboarding_step = 3
                     st.rerun()
-                    
+
         elif st.session_state.onboarding_step == 3:
-            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 20px;'>Step 3 of 3: Welcome</p>", unsafe_allow_html=True)
-            st.markdown("""
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 20px;'>Step 3 of 4: Name Your Companion</p>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align: center; color: #F3F4F6;'>Every Bot asks user what should I call you?<br>But I'll ask... <span style='color:#A78BFA'>What should you call me?</span> 🤖</h3>", unsafe_allow_html=True)
+            bot_name = st.text_input("Give your MindSpace companion a name:", placeholder="e.g. Baymax, Jarvis, Mindy...")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.session_state.current_user and st.session_state.current_user.get('onboarding_completed'):
+                    st.empty() # don't allow back if forced to name bot
+                else:
+                    if st.button("⬅ Back", use_container_width=True):
+                        st.session_state.onboarding_step = 2
+                        st.rerun()
+            with col_b2:
+                if st.button("Next Step ➔", use_container_width=True, type="primary"):
+                    st.session_state.temp_bot_name = bot_name if bot_name else "MindSpace"
+                    st.session_state.onboarding_step = 4
+                    st.rerun()
+                    
+        elif st.session_state.onboarding_step == 4:
+            st.markdown("<p style='text-align: center; color: #94A3B8; margin-bottom: 20px;'>Step 4 of 4: Welcome</p>", unsafe_allow_html=True)
+            b_name = st.session_state.get('temp_bot_name', 'MindSpace')
+            st.markdown(f"""
             <div style="background-color: rgba(37, 42, 61, 0.5); padding: 35px; border-radius: 15px; border: 1px solid rgba(167, 139, 250, 0.3); text-align: center;">
                 <h3 style="color: #F3F4F6; font-size: 1.8rem; margin-top: 0;">Welcome to MindSpace! 🌿</h3>
                 <p style="color: #E5E7EB; line-height: 1.8; margin-bottom: 25px; font-size: 1.1rem;">
-                    We believe that mental well-being is the foundation of a successful life. MindSpace is built to be your trusted, confidential, and judgment-free companion. Here, your thoughts are safe, your feelings are valid, and support is always just a message away.
+                    I am <b>{b_name}</b>, your trusted, confidential, and judgment-free companion. Here, your thoughts are safe, your feelings are valid, and support is always just a message away.
                 </p>
                 <p style="color: #A78BFA; font-weight: 600; font-size: 1.15rem;">You are never alone on this journey.</p>
             </div>
@@ -494,15 +573,16 @@ def show_onboarding():
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button("⬅ Back", use_container_width=True):
-                    st.session_state.onboarding_step = 2
+                    st.session_state.onboarding_step = 3
                     st.rerun()
             with col_b2:
                 if st.button("Get Started ✨", use_container_width=True, type="primary"):
                     update_user_onboarding(
                         st.session_state.current_user["username"], 
-                        st.session_state.get("temp_dob", ""), 
-                        st.session_state.get("temp_study_info", ""), 
-                        st.session_state.get("temp_career_level", "")
+                        st.session_state.get("temp_dob", st.session_state.current_user.get("dob", "")), 
+                        st.session_state.get("temp_study_info", st.session_state.current_user.get("study_info", "")), 
+                        st.session_state.get("temp_career_level", st.session_state.current_user.get("career_level", "")),
+                        st.session_state.get("temp_bot_name", "MindSpace")
                     )
                     # Refresh user object to show correct display name and status
                     st.session_state.current_user = get_user_by_username(st.session_state.current_user["username"])
@@ -517,13 +597,14 @@ def show_chatbot():
         st.rerun()
 
     username = st.session_state.current_user["username"]
+    bot_name = st.session_state.current_user.get("bot_name", "MindSpace")
 
     if "messages" not in st.session_state:
         db_msgs = get_user_messages(username)
         if db_msgs:
             st.session_state.messages = db_msgs
         else:
-            st.session_state.messages = [{"role": "assistant", "content": f"Hello {st.session_state.current_user['display_name']}! I'm MindSpace, your companion. How are you feeling today?", "show_tip": False, "tip_mood": "neutral"}]
+            st.session_state.messages = [{"role": "assistant", "content": f"Hello {st.session_state.current_user['display_name']}! I'm {bot_name}, your companion. How are you feeling today?", "show_tip": False, "tip_mood": "neutral"}]
 
     if "current_mood" not in st.session_state:
         st.session_state.current_mood = "neutral"
@@ -539,7 +620,7 @@ def show_chatbot():
         st.markdown(f"<h3 style='color: #F3F4F6;'>Hello, {st.session_state.current_user.get('display_name', 'User')} 👋</h3>", unsafe_allow_html=True)
         st.markdown("<hr style='border-color: rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
-        st.markdown("<h4 style='color: #A78BFA;'>Your MindSpace</h4>", unsafe_allow_html=True)
+        st.markdown(f"<h4 style='color: #A78BFA;'>Your {bot_name}</h4>", unsafe_allow_html=True)
         st.markdown("<p style='color: #94A3B8; font-size: 0.9rem;'>I'm here to listen, support, and help you navigate your thoughts.</p>", unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
@@ -595,7 +676,7 @@ def show_chatbot():
             st.rerun()
 
     # MAIN CHAT
-    st.markdown("<h1 style='margin-top: 0; color: #A78BFA; font-size: 2.8rem;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='margin-top: 0; color: #A78BFA; font-size: 2.8rem;'>🌿 {bot_name}</h1>", unsafe_allow_html=True)
     
     if st.session_state.get('crisis_triggered', False):
         st.markdown(CRISIS_BANNER_HTML, unsafe_allow_html=True)
@@ -733,7 +814,7 @@ def show_chatbot():
                                 msg["tip_mood"] = next_mood
                                 st.rerun()
     
-    if user_input := st.chat_input("Share your thoughts..."):
+    if user_input := st.chat_input(f"Talk to {bot_name}..."):
         # Add user message to state and DB
         st.session_state.messages.append({"role": "user", "content": user_input})
         save_message(username, "user", user_input)
@@ -746,7 +827,7 @@ def show_chatbot():
         mood_str = detected["mood"] if isinstance(detected, dict) else str(detected)
         save_mood(username, mood_str)
         
-        with st.spinner("MindSpace is thinking..."):
+        with st.spinner(f"{bot_name} is thinking..."):
             ai_reply = get_chat_response(
                 st.session_state.messages,
                 user_data=st.session_state.current_user
