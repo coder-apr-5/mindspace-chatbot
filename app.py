@@ -75,7 +75,7 @@ if "code" in st.query_params:
             name = user_info.get("name", "Google User")
             user = get_user_by_email(email)
             if not user:
-                create_user(username=email, email=email, password_hash="", auth_provider="google", is_verified=True)
+                create_user(username=email, email=email, password_hash="", auth_provider="google", is_verified=True, display_name=name)
                 user = get_user_by_email(email)
                 
             st.session_state.current_user = user
@@ -417,7 +417,8 @@ def show_chatbot():
 
     with st.sidebar:
         st.markdown("<h1 class='brand-title' style='margin-bottom: 0; color: #A78BFA;'>🌿 MindSpace</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size: 14px; color: #F3F4F6; margin-top: 0; font-weight: 600;'>Welcome, {st.session_state.current_user['username']}!</p>", unsafe_allow_html=True)
+        display_name = st.session_state.current_user.get('display_name', st.session_state.current_user['username'])
+        st.markdown(f"<p style='font-size: 15px; color: #F3F4F6; margin-top: 5px; font-weight: 600;'>Welcome, {display_name}!</p>", unsafe_allow_html=True)
         st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
         st.markdown("<h3 style='color: #A78BFA; font-size: 18px; margin-bottom: 10px;'>📈 Mood Timeline</h3>", unsafe_allow_html=True)
