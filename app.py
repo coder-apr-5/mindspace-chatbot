@@ -725,7 +725,7 @@ def show_chatbot():
             if st.button(m_meta["emoji"], key=f"mood_select_btn_{mood_key}", help=f"I'm feeling {m_meta['label']}", use_container_width=True):
                 st.session_state.current_mood = {"mood": mood_key, "intensity": "medium"}
                 st.session_state.mood_history.append({"mood": mood_key, "intensity": "medium"})
-                save_mood(username, {"mood": mood_key, "intensity": "medium"})
+                save_mood(username, mood_key)
                 st.rerun()
     
     chat_placeholder = st.container()

@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import bcrypt
 import re
 import random
