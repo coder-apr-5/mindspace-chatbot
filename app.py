@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 from utils.db import create_user, get_user_by_username, get_user_by_email, verify_user, update_user_onboarding, save_message, get_user_messages, save_mood, get_user_moods, delete_user_history
 from utils.auth import hash_password, verify_password, check_password_strength, is_valid_email, generate_verification_code, send_verification_email
 
+# pyrefly: ignore [missing-import]
+import extra_streamlit_components as stx
+
 from utils.groq_api import get_chat_response, get_api_key
 from utils.mood_detector import detect_mood
 from utils.tip_cards import TIPS
@@ -104,6 +107,9 @@ ROBOT_SVG_HTML = """
 
 ROBOT_SVG_B64 = base64.b64encode(ROBOT_SVG_HTML.encode('utf-8')).decode('utf-8')
 
+# Initialize Cookie Manager
+cookie_manager = stx.CookieManager(key="cookie_manager")
+
 def authenticate_google_code(code):
     redirect_uri = "http://localhost:8501"
     token_url = "https://oauth2.googleapis.com/token"
@@ -133,9 +139,8 @@ st.set_page_config(
 )
 
 # Handle Google OAuth Callback via Query Params
-if "code" in st.query_params:
+if "code" in st.query_params and "current_user" not in st.session_state:
     code = st.query_params["code"]
-    st.query_params.clear() # Clear it so it doesn't run again
     
     with st.spinner("Authenticating with Google..."):
         user_info = authenticate_google_code(code)
@@ -146,14 +151,20 @@ if "code" in st.query_params:
             if not user:
                 create_user(username=email, email=email, password_hash="", auth_provider="google", is_verified=True, display_name=name)
                 user = get_user_by_email(email)
+            if user:
+                st.session_state.current_user = user
+                cookie_manager.set("mindspace_auth", user["username"], expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
                 
-            st.session_state.current_user = user
-            if not user.get('onboarding_completed', False) or not user.get('bot_name'):
-                st.session_state.app_page = "onboarding"
-            else:
-                st.session_state.app_page = "chatbot"
-            st.rerun()
+                # Safely clear the URL on the frontend to prevent stale codes on refresh
+                import streamlit.components.v1 as components
+                components.html("<script>window.parent.history.replaceState({}, '', window.parent.location.pathname);</script>", height=0, width=0)
+                
+                if not user.get('onboarding_completed', False) or not user.get('bot_name'):
+                    st.session_state.app_page = "onboarding"
+                else:
+                    st.session_state.app_page = "chatbot"
         else:
+            
             st.error("Failed to authenticate with Google. Please check your credentials.")
 
 # Pre-load the brain image
@@ -292,6 +303,19 @@ def markdown_to_html(text: str) -> str:
 # Session State Initialization
 if "app_page" not in st.session_state:
     st.session_state.app_page = "intro"
+    
+# Auto-login logic via cookie
+auth_username = cookie_manager.get("mindspace_auth")
+if auth_username and "current_user" not in st.session_state:
+    user = get_user_by_username(auth_username)
+    if user:
+        st.session_state.current_user = user
+        if not user.get('onboarding_completed', False) or not user.get('bot_name'):
+            st.session_state.app_page = "onboarding"
+        else:
+            st.session_state.app_page = "chatbot"
+        st.rerun()
+
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -396,16 +420,16 @@ def show_login():
                         st.error(f"This account uses Google Login. Please use 'Sign in with Google'.")
                     elif not user['is_verified']:
                         st.error("Please verify your email first.")
-                    else:
-                        if verify_password(password, user['password_hash']):
-                            st.session_state.current_user = user
-                            if not user.get('onboarding_completed', False) or not user.get('bot_name'):
-                                st.session_state.app_page = "onboarding"
-                            else:
-                                st.session_state.app_page = "chatbot"
-                            st.rerun()
+                    elif verify_password(password, user['password_hash']):
+                        st.session_state.current_user = user
+                        cookie_manager.set("mindspace_auth", user["username"], expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
+                        if not user.get('onboarding_completed', False) or not user.get('bot_name'):
+                            st.session_state.app_page = "onboarding"
                         else:
-                            st.error("Invalid credentials.")
+                            st.session_state.app_page = "chatbot"
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials.")
                 else:
                     st.error("Invalid credentials.")
             else:
@@ -488,12 +512,10 @@ def show_verify():
                 verify_user(username)
                 user = get_user_by_username(username)
                 st.session_state.current_user = user
+                cookie_manager.set("mindspace_auth", user["username"], expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
                 st.success("Email verified successfully!")
                 time.sleep(1)
-                if not user.get('onboarding_completed', False) or not user.get('bot_name'):
-                    st.session_state.app_page = "onboarding"
-                else:
-                    st.session_state.app_page = "chatbot"
+                st.session_state.app_page = "onboarding"
                 st.rerun()
             else:
                 st.error("Invalid verification code. Please try again.")
@@ -683,6 +705,7 @@ def show_chatbot():
         st.markdown("<hr style='border: 1px solid rgba(167, 139, 250, 0.2);'>", unsafe_allow_html=True)
         
         if st.button("🚪 Log Out", use_container_width=True):
+            cookie_manager.delete("mindspace_auth")
             st.session_state.current_user = None
             st.session_state.app_page = "home"
             st.rerun()
